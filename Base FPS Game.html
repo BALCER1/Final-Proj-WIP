@@ -1,0 +1,380 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Base Game</title>
+<style>
+  :root {
+    --bg: #e9e9e9;
+    --panel: #ffffff;
+    --text: #1a1a1a;
+    --muted: #666;
+    --line: #bbb;
+    --btn: #1a1a1a;
+    --btn-text: #fff;
+    box-sizing: border-box;
+    padding-top: env(safe-area-inset-top, 0px);
+    padding-bottom: env(safe-area-inset-bottom, 0px);
+  }
+
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --bg: #1b1b1b;
+      --panel: #262626;
+      --text: #eee;
+      --muted: #999;
+      --line: #444;
+      --btn: #eee;
+      --btn-text: #111;
+    }
+  }
+
+  :root[data-theme="dark"] {
+    --bg: #1b1b1b;
+    --panel: #262626;
+    --text: #eee;
+    --muted: #999;
+    --line: #444;
+    --btn: #eee;
+    --btn-text: #111;
+  }
+
+  html,
+  body {
+    height: 100%;
+    margin: 0;
+    background: var(--bg);
+    color: var(--text);
+    font-family: system-ui, -apple-system, "Segoe UI", sans-serif;
+    overflow: hidden;
+  }
+
+  canvas {
+    display: block;
+    width: 100%;
+    height: 100%;
+  }
+
+  #menu {
+    position: fixed;
+    inset: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: rgba(0, 0, 0, .35);
+  }
+
+  .panel {
+    background: var(--panel);
+    border: 1px solid var(--line);
+    padding: 28px 32px;
+    min-width: 280px;
+    max-width: 90vw;
+    text-align: center;
+  }
+
+  h1 {
+    margin: 0 0 4px;
+    font-size: 22px;
+    font-weight: 600;
+  }
+
+  p {
+    color: var(--muted);
+    font-size: 14px;
+    margin: 6px 0;
+  }
+
+  button {
+    margin-top: 16px;
+    padding: 10px 28px;
+    font-size: 15px;
+    background: var(--btn);
+    color: var(--btn-text);
+    border: 0;
+    cursor: pointer;
+  }
+
+  label {
+    display: block;
+    margin-top: 14px;
+    font-size: 13px;
+    color: var(--muted);
+  }
+
+  input[type=range] {
+    width: 100%;
+  }
+
+  #cross {
+    position: fixed;
+    left: 50%;
+    top: 50%;
+    width: 6px;
+    height: 6px;
+    margin: -3px 0 0 -3px;
+    background: var(--text);
+    opacity: .6;
+    border-radius: 50%;
+    pointer-events: none;
+    display: none;
+  }
+
+  #hint {
+    position: fixed;
+    left: 12px;
+    bottom: calc(12px + env(safe-area-inset-bottom, 0px));
+    font-size: 12px;
+    color: var(--muted);
+    display: none;
+  }
+</style>
+</head>
+<body>
+<div id="menu">
+  <div class="panel">
+    <h1 id="title">Base Game</h1>
+    <p id="sub">Prototype v0.1</p>
+    <button id="play">Play</button>
+    <label>Mouse sensitivity<input id="sens" type="range" min="1" max="10" step="0.5" value="4"></label>
+    <p style="margin-top:18px">WASD move &middot; Space jump &middot; Shift sprint &middot; Esc pause</p>
+    <p id="warn" style="display:none">Pointer lock was blocked. Try opening the page in its own tab.</p>
+  </div>
+</div>
+<div id="cross"></div>
+<div id="hint">Esc: pause</div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+<script>
+const CONFIG = {
+    walk: 5,
+    sprint: 9,
+    accel: 12,
+    gravity: 25,
+    jump: 8,
+    eye: 1.7,
+    height: 1.8,
+    radius: 0.3,
+    fov: 75,
+    sensitivity: 0.002
+};
+
+const scene = new THREE.Scene();
+scene.background = new THREE.Color(0xbfc4c8);
+scene.fog = new THREE.Fog(0xbfc4c8, 20, 90);
+const camera = new THREE.PerspectiveCamera(CONFIG.fov, innerWidth / innerHeight, 0.1, 300);
+camera.rotation.order = 'YXZ';
+const renderer = new THREE.WebGLRenderer({ antialias: true });
+renderer.setSize(innerWidth, innerHeight);
+renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
+document.body.prepend(renderer.domElement);
+
+const World = {
+    colliders: [],
+    addBox(x, y, z, w, h, d, color = 0x8a8f94) {
+        const mesh = new THREE.Mesh(
+            new THREE.BoxGeometry(w, h, d),
+            new THREE.MeshLambertMaterial({ color })
+        );
+        mesh.position.set(x, y + h / 2, z);
+        scene.add(mesh);
+        this.colliders.push({
+            min: new THREE.Vector3(x - w / 2, y, z - d / 2),
+            max: new THREE.Vector3(x + w / 2, y + h, z + d / 2)
+        });
+    },
+    build() {
+        const floor = new THREE.Mesh(
+            new THREE.PlaneGeometry(200, 200),
+            new THREE.MeshLambertMaterial({ color: 0x9a9a9a })
+        );
+        floor.rotation.x = -Math.PI / 2;
+        scene.add(floor);
+        scene.add(new THREE.GridHelper(200, 100, 0x777777, 0x888888));
+        scene.add(new THREE.AmbientLight(0xffffff, 0.7));
+        const sun = new THREE.DirectionalLight(0xffffff, 0.6);
+        sun.position.set(20, 40, 10);
+        scene.add(sun);
+        this.addBox(0, 0, -10, 4, 2, 4);
+        this.addBox(10, 0, -4, 3, 1, 3);
+        this.addBox(-9, 0, -14, 6, 3, 2);
+        this.addBox(6, 0, -16, 2, 4, 2);
+        this.addBox(-4, 0, -4, 2, 0.5, 2);
+    }
+};
+
+const Input = {
+    keys: {},
+    init() {
+        addEventListener('keydown', e => {
+            this.keys[e.code] = true;
+            if (e.code === 'Space') {
+                e.preventDefault();
+            }
+        });
+        addEventListener('keyup', e => {
+            this.keys[e.code] = false;
+        });
+        addEventListener('blur', () => {
+            this.keys = {};
+        });
+    }
+};
+
+const Player = {
+    pos: new THREE.Vector3(0, 0, 8),
+    vel: new THREE.Vector3(),
+    yaw: 0,
+    pitch: 0,
+    onGround: false,
+
+    look(dx, dy) {
+        this.yaw -= dx * CONFIG.sensitivity;
+        this.pitch = Math.max(-1.55, Math.min(1.55, this.pitch - dy * CONFIG.sensitivity));
+    },
+
+    hits(p) {
+        const r = CONFIG.radius;
+        const h = CONFIG.height;
+
+        for (const b of World.colliders) {
+            if (
+                p.x + r > b.min.x &&
+                p.x - r < b.max.x &&
+                p.z + r > b.min.z &&
+                p.z - r < b.max.z &&
+                p.y + h > b.min.y &&
+                p.y < b.max.y
+            ) {
+                return b;
+            }
+        }
+        return null;
+    },
+
+    update(dt) {
+        const k = Input.keys;
+        const fwd = (k.KeyW || k.ArrowUp ? 1 : 0) - (k.KeyS || k.ArrowDown ? 1 : 0);
+        const str = (k.KeyD || k.ArrowRight ? 1 : 0) - (k.KeyA || k.ArrowLeft ? 1 : 0);
+        const speed = k.ShiftLeft || k.ShiftRight ? CONFIG.sprint : CONFIG.walk;
+
+        const sin = Math.sin(this.yaw);
+        const cos = Math.cos(this.yaw);
+        let wx = str * cos - fwd * sin;
+        let wz = -str * sin - fwd * cos;
+        const len = Math.hypot(wx, wz);
+        if (len > 0) {
+            wx = wx / len * speed;
+            wz = wz / len * speed;
+        }
+
+        const t = 1 - Math.exp(-CONFIG.accel * dt);
+        this.vel.x += (wx - this.vel.x) * t;
+        this.vel.z += (wz - this.vel.z) * t;
+
+        if (k.Space && this.onGround) {
+            this.vel.y = CONFIG.jump;
+            this.onGround = false;
+        }
+        this.vel.y -= CONFIG.gravity * dt;
+
+        const p = this.pos.clone();
+        p.x += this.vel.x * dt;
+        if (this.hits(p)) {
+            p.x = this.pos.x;
+            this.vel.x = 0;
+        }
+        p.z += this.vel.z * dt;
+        if (this.hits(p)) {
+            p.z = this.pos.z;
+            this.vel.z = 0;
+        }
+        p.y += this.vel.y * dt;
+        this.onGround = false;
+        const hit = this.hits(p);
+        if (hit) {
+            if (this.vel.y < 0) {
+                p.y = hit.max.y;
+                this.onGround = true;
+            } else {
+                p.y = this.pos.y;
+            }
+            this.vel.y = 0;
+        }
+        if (p.y <= 0) {
+            p.y = 0;
+            this.vel.y = 0;
+            this.onGround = true;
+        }
+        this.pos.copy(p);
+
+        camera.position.set(this.pos.x, this.pos.y + CONFIG.eye, this.pos.z);
+        camera.rotation.set(this.pitch, this.yaw, 0);
+    }
+};
+
+const Game = {
+    state: 'menu',
+    el: {
+        menu: menu,
+        play: play,
+        cross: cross,
+        hint: hint,
+        warn: warn,
+        title: title,
+        sub: sub,
+        sens: sens
+    },
+    init() {
+        World.build();
+        Input.init();
+        this.el.play.onclick = () => renderer.domElement.requestPointerLock();
+        this.el.sens.oninput = () => {
+            CONFIG.sensitivity = this.el.sens.value * 0.0005;
+        };
+        this.el.sens.oninput();
+        document.addEventListener('pointerlockchange', () => {
+            const locked = document.pointerLockElement === renderer.domElement;
+            this.setState(locked ? 'playing' : (this.state === 'menu' ? 'menu' : 'paused'));
+        });
+        document.addEventListener('pointerlockerror', () => {
+            this.el.warn.style.display = 'block';
+        });
+        document.addEventListener('mousemove', e => {
+            if (this.state === 'playing') {
+                Player.look(e.movementX, e.movementY);
+            }
+        });
+        addEventListener('resize', () => {
+            camera.aspect = innerWidth / innerHeight;
+            camera.updateProjectionMatrix();
+            renderer.setSize(innerWidth, innerHeight);
+        });
+        this.last = performance.now();
+        requestAnimationFrame(t => this.loop(t));
+    },
+    setState(s) {
+        this.state = s;
+        const playing = s === 'playing';
+        this.el.menu.style.display = playing ? 'none' : 'flex';
+        this.el.cross.style.display = this.el.hint.style.display = playing ? 'block' : 'none';
+        this.el.play.textContent = s === 'paused' ? 'Resume' : 'Play';
+        this.el.sub.textContent = s === 'paused' ? 'Paused' : 'Prototype v0.1';
+    },
+    loop(now) {
+        const dt = Math.min((now - this.last) / 1000, 0.05);
+        this.last = now;
+        if (this.state === 'playing') {
+            Player.update(dt);
+        }
+        renderer.render(scene, camera);
+        requestAnimationFrame(t => this.loop(t));
+    }
+};
+
+camera.position.set(0, CONFIG.eye, 8);
+Game.init();
+</script>
+</body>
+</html>
