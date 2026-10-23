@@ -1,0 +1,648 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Medieval Hall</title>
+<style>
+  :root {
+    --bg: #e9e9e9;
+    --panel: #ffffff;
+    --text: #1a1a1a;
+    --muted: #666;
+    --line: #bbb;
+    --btn: #1a1a1a;
+    --btn-text: #fff;
+    box-sizing: border-box;
+    padding-top: env(safe-area-inset-top, 0px);
+    padding-bottom: env(safe-area-inset-bottom, 0px);
+  }
+
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --bg: #1b1b1b;
+      --panel: #262626;
+      --text: #eee;
+      --muted: #999;
+      --line: #444;
+      --btn: #eee;
+      --btn-text: #111;
+    }
+  }
+
+  :root[data-theme="dark"] {
+    --bg: #1b1b1b;
+    --panel: #262626;
+    --text: #eee;
+    --muted: #999;
+    --line: #444;
+    --btn: #eee;
+    --btn-text: #111;
+  }
+
+  html,
+  body {
+    height: 100%;
+    margin: 0;
+    background: var(--bg);
+    color: var(--text);
+    font-family: system-ui, -apple-system, "Segoe UI", sans-serif;
+    overflow: hidden;
+  }
+
+  canvas {
+    display: block;
+    width: 100%;
+    height: 100%;
+  }
+
+  #menu {
+    position: fixed;
+    inset: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: rgba(0, 0, 0, .55);
+  }
+
+  .panel {
+    background: var(--panel);
+    border: 1px solid var(--line);
+    padding: 36px 44px;
+    min-width: 300px;
+    max-width: 90vw;
+    text-align: center;
+  }
+
+  h1 {
+    margin: 0 0 4px;
+    font-size: 28px;
+    font-weight: 600;
+  }
+
+  p {
+    color: var(--muted);
+    font-size: 14px;
+    margin: 6px 0;
+  }
+
+  button {
+    margin-top: 20px;
+    padding: 12px 40px;
+    font-size: 16px;
+    background: var(--btn);
+    color: var(--btn-text);
+    border: 0;
+    cursor: pointer;
+  }
+
+  label {
+    display: block;
+    margin-top: 18px;
+    font-size: 13px;
+    color: var(--muted);
+  }
+
+  input[type=range] {
+    width: 100%;
+  }
+
+  #cross {
+    position: fixed;
+    left: 50%;
+    top: 50%;
+    width: 6px;
+    height: 6px;
+    margin: -3px 0 0 -3px;
+    background: #fff;
+    opacity: .7;
+    border-radius: 50%;
+    pointer-events: none;
+    display: none;
+  }
+
+  #hint {
+    position: fixed;
+    left: 12px;
+    bottom: calc(12px + env(safe-area-inset-bottom, 0px));
+    font-size: 12px;
+    color: #ddd;
+    display: none;
+  }
+  #tip {
+    position: fixed;
+    left: 50%;
+    top: 58%;
+    transform: translateX(-50%);
+    padding: 6px 14px;
+    font-size: 13px;
+    color: #fff;
+    background: rgba(0, 0, 0, .55);
+    pointer-events: none;
+    display: none;
+  }
+</style>
+</head>
+<body>
+<div id="menu">
+  <div class="panel">
+    <h1 id="title">Medieval Hall</h1>
+    <p id="sub">Main Menu</p>
+    <button id="play">Start</button>
+    <label>Mouse sensitivity<input id="sens" type="range" min="1" max="10" step="0.5" value="4"></label>
+    <p style="margin-top:18px">WASD move &middot; Space jump &middot; Shift sprint &middot; E interact &middot; Esc pause</p>
+    <p id="warn" style="display:none">Pointer lock was blocked. Try opening the page in its own tab.</p>
+  </div>
+</div>
+<div id="cross"></div>
+<div id="hint">Esc: pause</div>
+<div id="tip"></div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+<script>
+const CONFIG = {
+    walk: 6,
+    sprint: 11,
+    accel: 12,
+    gravity: 25,
+    jump: 8,
+    eye: 1.7,
+    height: 1.8,
+    radius: 0.3,
+    step: 0.5,
+    fov: 75,
+    sensitivity: 0.002
+};
+
+const HALL = {
+    halfW: 30,
+    halfL: 50,
+    wallH: 14,
+    balconyY: 6,
+    balconyDepth: 8,
+    slab: 0.5,
+    stepH: 0.4,
+    stepCount: 15
+};
+
+const scene = new THREE.Scene();
+scene.background = new THREE.Color(0x15110e);
+scene.fog = new THREE.Fog(0x15110e, 40, 140);
+const camera = new THREE.PerspectiveCamera(CONFIG.fov, innerWidth / innerHeight, 0.1, 400);
+camera.rotation.order = 'YXZ';
+const renderer = new THREE.WebGLRenderer({ antialias: true });
+renderer.setSize(innerWidth, innerHeight);
+renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
+document.body.prepend(renderer.domElement);
+
+const World = {
+    colliders: [],
+    ramps: [],
+    mat(color) {
+        return new THREE.MeshLambertMaterial({ color, side: THREE.DoubleSide });
+    },
+    deco(x, y, z, w, h, d, color) {
+        const mesh = new THREE.Mesh(new THREE.BoxGeometry(w, h, d), this.mat(color));
+        mesh.position.set(x, y + h / 2, z);
+        scene.add(mesh);
+        return mesh;
+    },
+    solid(x, y, z, w, h, d) {
+        this.colliders.push({
+            min: new THREE.Vector3(x - w / 2, y, z - d / 2),
+            max: new THREE.Vector3(x + w / 2, y + h, z + d / 2)
+        });
+    },
+    addBox(x, y, z, w, h, d, color = 0x8a8f94) {
+        this.deco(x, y, z, w, h, d, color);
+        this.solid(x, y, z, w, h, d);
+    },
+    rampHeight(x, z) {
+        for (const r of this.ramps) {
+            if (x >= r.x0 && x <= r.x1 && z >= r.zFar && z <= r.zNear) {
+                return Math.max(0, Math.min(r.top, r.slope * (r.zRef - z)));
+            }
+        }
+        return null;
+    },
+    arch(span, rise, x, z, alongZ) {
+        const hw = span / 2;
+        const t = 0.7;
+        const inner = rise - t * 1.4;
+        const s = new THREE.Shape();
+        s.moveTo(-hw, 0);
+        s.quadraticCurveTo(-hw, rise * 0.45, 0, rise);
+        s.quadraticCurveTo(hw, rise * 0.45, hw, 0);
+        s.lineTo(hw - t, 0);
+        s.quadraticCurveTo(hw - t, inner * 0.45, 0, inner);
+        s.quadraticCurveTo(-hw + t, inner * 0.45, -hw + t, 0);
+        s.closePath();
+        const geo = new THREE.ExtrudeGeometry(s, { depth: 1, bevelEnabled: false, curveSegments: 10 });
+        const mesh = new THREE.Mesh(geo, this.mat(0x6a5844));
+        if (alongZ) {
+            mesh.rotation.y = Math.PI / 2;
+            mesh.position.set(x - 0.5, HALL.wallH - rise, z);
+        } else {
+            mesh.position.set(x, HALL.wallH - rise, z - 0.5);
+        }
+        scene.add(mesh);
+    },
+    pillar(x, z) {
+        const H = HALL.wallH;
+        const shaft = 0x6e6559;
+        const trim = 0x80766a;
+        this.addBox(x, 0, z, 3.2, 0.45, 3.2, trim);
+        this.deco(x, 0.45, z, 2.6, 0.6, 2.6, trim);
+        this.addBox(x, 0, z, 2, H, 2, shaft);
+        this.deco(x, 7, z, 2.5, 0.35, 2.5, trim);
+        this.deco(x, H - 2.2, z, 2.6, 0.5, 2.6, trim);
+        this.deco(x, H - 1.7, z, 3.2, 1.7, 3.2, trim);
+    },
+    fenceZ(x, z0, z1, y) {
+        const wood = 0x4a3426;
+        const len = z1 - z0;
+        const zc = (z0 + z1) / 2;
+        this.solid(x, y, zc, 0.2, 1.2, len);
+        this.deco(x, y + 1.1, zc, 0.18, 0.12, len, wood);
+        this.deco(x, y + 0.55, zc, 0.1, 0.08, len, wood);
+        const n = Math.round(len / 2.5);
+        for (let i = 0; i <= n; i++) {
+            this.deco(x, y, z0 + len * i / n, 0.18, 1.2, 0.18, wood);
+        }
+    },
+    fenceX(z, x0, x1, y) {
+        const wood = 0x4a3426;
+        const len = x1 - x0;
+        const xc = (x0 + x1) / 2;
+        this.solid(xc, y, z, len, 1.2, 0.2);
+        this.deco(xc, y + 1.1, z, len, 0.12, 0.18, wood);
+        this.deco(xc, y + 0.55, z, len, 0.08, 0.1, wood);
+        const n = Math.round(len / 2.5);
+        for (let i = 0; i <= n; i++) {
+            this.deco(x0 + len * i / n, y, z, 0.18, 1.2, 0.18, wood);
+        }
+    },
+    build() {
+        const W = HALL.halfW;
+        const L = HALL.halfL;
+        const H = HALL.wallH;
+        const BY = HALL.balconyY;
+        const BD = HALL.balconyDepth;
+        const slab = HALL.slab;
+        const SH = HALL.stepH;
+        const SC = HALL.stepCount;
+
+        const stone = 0x8b7d6b;
+        const wood = 0x5b4130;
+        const floorColor = 0x6f6a62;
+        const ceilingColor = 0x3d2f24;
+        const rib = 0x5a4a3a;
+
+        const floor = new THREE.Mesh(
+            new THREE.PlaneGeometry(W * 2, L * 2),
+            new THREE.MeshLambertMaterial({ color: floorColor })
+        );
+        floor.rotation.x = -Math.PI / 2;
+        scene.add(floor);
+
+        scene.add(new THREE.AmbientLight(0xffffff, 0.75));
+        const sun = new THREE.DirectionalLight(0xffe6c0, 0.5);
+        sun.position.set(20, 40, 10);
+        scene.add(sun);
+
+        this.addBox(-W - 1, 0, 0, 2, H, L * 2 + 4, stone);
+        this.addBox(W + 1, 0, 0, 2, H, L * 2 + 4, stone);
+        this.addBox(0, 0, -L - 1, W * 2, H, 2, stone);
+        this.addBox(0, 0, L + 1, W * 2, H, 2, stone);
+        this.addBox(0, H, 0, W * 2 + 4, 1, L * 2 + 4, ceilingColor);
+
+        for (let z = -40; z <= 40; z += 10) {
+            this.pillar(-12, z);
+            this.pillar(12, z);
+            this.arch(24, 5, 0, z, false);
+            this.arch(18, 4, -21, z, false);
+            this.arch(18, 4, 21, z, false);
+        }
+        for (const x of [-12, 12]) {
+            for (let z = -35; z <= 35; z += 10) {
+                this.arch(10, 3, x, z, true);
+            }
+        }
+        for (const x of [-21, 0, 21]) {
+            this.deco(x, H - 0.6, 0, 0.7, 0.6, L * 2, rib);
+        }
+
+        const stairStart = L - 5;
+        const zNear = stairStart + 0.5;
+        const zFar = stairStart - (SC - 1) - 0.5;
+        const slabEnd = zFar;
+        const slabLen = slabEnd + L;
+        const slabCenter = (slabEnd - L) / 2;
+
+        for (const side of [-1, 1]) {
+            const cx = side * (W - BD / 2);
+            const innerX = side * (W - BD);
+            const sx = side * (W - (BD - 1) / 2);
+            const hallX = side * (W - (BD - 1));
+
+            this.addBox(cx, BY - slab, slabCenter, BD, slab, slabLen, wood);
+            this.fenceZ(innerX + side * 0.2, -L + BD - 0.2, slabEnd, BY);
+
+            for (let z = -40; z <= slabEnd - 10; z += 10) {
+                this.addBox(innerX + side * 0.8, 0, z, 1, BY - slab, 1, 0x6e6559);
+            }
+
+            for (let i = 0; i < SC; i++) {
+                this.deco(sx, 0, stairStart - i, BD - 1, (i + 1) * SH, 1, stone);
+            }
+
+            const xa = side * W;
+            const xb = hallX + side * 0.1;
+            this.ramps.push({
+                x0: Math.min(xa, xb),
+                x1: Math.max(xa, xb),
+                zNear,
+                zFar,
+                zRef: stairStart + 1,
+                slope: SH,
+                top: SC * SH
+            });
+
+            this.solid(hallX, 0, (zNear + zFar) / 2, 0.2, BY, zNear - zFar);
+            this.solid(cx, 0, zFar, BD, BY, 0.2);
+
+            const rise = SC * SH;
+            const run = zNear - zFar;
+            const rail = this.deco(hallX, 0, (zNear + zFar) / 2, 0.15, 0.12, Math.hypot(run, rise), 0x4a3426);
+            rail.position.y = rise / 2 + SH / 2 + 1.1;
+            rail.rotation.x = Math.atan2(rise, run);
+            for (let k = 0; k <= 5; k++) {
+                const z = zNear - k * (run / 5);
+                this.deco(hallX, SH * (stairStart + 1 - z), z, 0.15, 1.1, 0.15, 0x4a3426);
+            }
+        }
+
+        this.addBox(0, BY - slab, -L + BD / 2, (W - BD) * 2, slab, BD, wood);
+        this.fenceX(-L + BD - 0.2, -(W - BD) - 0.2, (W - BD) + 0.2, BY);
+        for (const x of [-12, 12]) {
+            this.addBox(x, 0, -L + BD - 0.8, 1, BY - slab, 1, 0x6e6559);
+        }
+
+        this.deco(0, 0, -1, 12.8, 0.02, 94.8, 0x9a7b2f);
+        this.deco(0, 0, -1, 12, 0.03, 94, 0x7a1f1f);
+        this.deco(0, 0, -1, 9, 0.04, 90, 0x611818);
+    }
+};
+
+const Input = {
+    keys: {},
+    init() {
+        addEventListener('keydown', e => {
+            this.keys[e.code] = true;
+            if (e.code === 'Space') {
+                e.preventDefault();
+            }
+        });
+        addEventListener('keyup', e => {
+            this.keys[e.code] = false;
+        });
+        addEventListener('blur', () => {
+            this.keys = {};
+        });
+    }
+};
+
+const Player = {
+    pos: new THREE.Vector3(0, 0, 42),
+    vel: new THREE.Vector3(),
+    yaw: 0,
+    pitch: 0,
+    onGround: false,
+
+    look(dx, dy) {
+        this.yaw -= dx * CONFIG.sensitivity;
+        this.pitch = Math.max(-1.55, Math.min(1.55, this.pitch - dy * CONFIG.sensitivity));
+    },
+
+    hits(p) {
+        const r = CONFIG.radius;
+        const h = CONFIG.height;
+
+        for (const b of World.colliders) {
+            if (
+                p.x + r > b.min.x &&
+                p.x - r < b.max.x &&
+                p.z + r > b.min.z &&
+                p.z - r < b.max.z &&
+                p.y + h > b.min.y &&
+                p.y < b.max.y
+            ) {
+                return b;
+            }
+        }
+        return null;
+    },
+
+    slide(p, axis) {
+        if (!this.hits(p)) {
+            return;
+        }
+        if (this.onGround) {
+            const y = p.y;
+            p.y = y + CONFIG.step;
+            if (!this.hits(p)) {
+                return;
+            }
+            p.y = y;
+        }
+        p[axis] = this.pos[axis];
+        this.vel[axis] = 0;
+    },
+
+    update(dt) {
+        const k = Input.keys;
+        const fwd = (k.KeyW || k.ArrowUp ? 1 : 0) - (k.KeyS || k.ArrowDown ? 1 : 0);
+        const str = (k.KeyD || k.ArrowRight ? 1 : 0) - (k.KeyA || k.ArrowLeft ? 1 : 0);
+        const speed = k.ShiftLeft || k.ShiftRight ? CONFIG.sprint : CONFIG.walk;
+
+        const sin = Math.sin(this.yaw);
+        const cos = Math.cos(this.yaw);
+        let wx = str * cos - fwd * sin;
+        let wz = -str * sin - fwd * cos;
+        const len = Math.hypot(wx, wz);
+        if (len > 0) {
+            wx = wx / len * speed;
+            wz = wz / len * speed;
+        }
+
+        const t = 1 - Math.exp(-CONFIG.accel * dt);
+        this.vel.x += (wx - this.vel.x) * t;
+        this.vel.z += (wz - this.vel.z) * t;
+
+        if (k.Space && this.onGround) {
+            this.vel.y = CONFIG.jump;
+            this.onGround = false;
+        }
+        this.vel.y -= CONFIG.gravity * dt;
+
+        const p = this.pos.clone();
+        p.x += this.vel.x * dt;
+        this.slide(p, 'x');
+        p.z += this.vel.z * dt;
+        this.slide(p, 'z');
+        const wasGround = this.onGround;
+        p.y += this.vel.y * dt;
+        this.onGround = false;
+        const hit = this.hits(p);
+        if (hit) {
+            if (this.vel.y < 0) {
+                p.y = hit.max.y;
+                this.onGround = true;
+            } else {
+                p.y = this.pos.y;
+            }
+            this.vel.y = 0;
+        }
+        const gy = World.rampHeight(p.x, p.z);
+        if (gy !== null && this.vel.y <= 0 && (p.y <= gy || (wasGround && p.y - gy < 0.6))) {
+            p.y = gy;
+            this.vel.y = 0;
+            this.onGround = true;
+        }
+        if (p.y <= 0) {
+            p.y = 0;
+            this.vel.y = 0;
+            this.onGround = true;
+        }
+        this.pos.copy(p);
+
+        camera.position.set(this.pos.x, this.pos.y + CONFIG.eye, this.pos.z);
+        camera.rotation.set(this.pitch, this.yaw, 0);
+    }
+};
+
+const Door = {
+    open: false,
+    t: 0,
+    x: 0,
+    z: -HALL.halfL,
+    left: null,
+    right: null,
+    build() {
+        const L = HALL.halfL;
+        const dark = 0x2e231a;
+        const wood = 0x5b4130;
+        const black = new THREE.Mesh(
+            new THREE.PlaneGeometry(4, 5),
+            new THREE.MeshBasicMaterial({ color: 0x000000 })
+        );
+        black.position.set(this.x, 2.5, -L + 0.03);
+        scene.add(black);
+        World.deco(this.x - 2.3, 0, -L + 0.25, 0.5, 5.4, 0.5, dark);
+        World.deco(this.x + 2.3, 0, -L + 0.25, 0.5, 5.4, 0.5, dark);
+        World.deco(this.x, 5, -L + 0.25, 5.1, 0.4, 0.5, dark);
+        this.left = new THREE.Group();
+        this.left.position.set(this.x - 2, 0, -L + 0.12);
+        const leafL = new THREE.Mesh(new THREE.BoxGeometry(2, 5, 0.15), World.mat(wood));
+        leafL.position.set(1, 2.5, 0);
+        this.left.add(leafL);
+        this.right = new THREE.Group();
+        this.right.position.set(this.x + 2, 0, -L + 0.12);
+        const leafR = new THREE.Mesh(new THREE.BoxGeometry(2, 5, 0.15), World.mat(wood));
+        leafR.position.set(-1, 2.5, 0);
+        this.right.add(leafR);
+        scene.add(this.left);
+        scene.add(this.right);
+    },
+    near() {
+        return Math.hypot(Player.pos.x - this.x, Player.pos.z - this.z) < 7;
+    },
+    toggle() {
+        if (this.near()) {
+            this.open = !this.open;
+        }
+    },
+    update(dt) {
+        const target = this.open ? 1 : 0;
+        const diff = target - this.t;
+        this.t += Math.sign(diff) * Math.min(Math.abs(diff), dt * 0.8);
+        const e = this.t * this.t * (3 - 2 * this.t);
+        this.left.rotation.y = -e * 1.75;
+        this.right.rotation.y = e * 1.75;
+    }
+};
+
+const Game = {
+    state: 'menu',
+    el: {
+        menu: menu,
+        play: play,
+        cross: cross,
+        hint: hint,
+        warn: warn,
+        title: title,
+        sub: sub,
+        sens: sens,
+        tip: tip
+    },
+    init() {
+        World.build();
+        Door.build();
+        Input.init();
+        addEventListener('keydown', e => {
+            if (e.code === 'KeyE' && this.state === 'playing') {
+                Door.toggle();
+            }
+        });
+        this.el.play.onclick = () => renderer.domElement.requestPointerLock();
+        this.el.sens.oninput = () => {
+            CONFIG.sensitivity = this.el.sens.value * 0.0005;
+        };
+        this.el.sens.oninput();
+        document.addEventListener('pointerlockchange', () => {
+            const locked = document.pointerLockElement === renderer.domElement;
+            this.setState(locked ? 'playing' : (this.state === 'menu' ? 'menu' : 'paused'));
+        });
+        document.addEventListener('pointerlockerror', () => {
+            this.el.warn.style.display = 'block';
+        });
+        document.addEventListener('mousemove', e => {
+            if (this.state === 'playing') {
+                Player.look(e.movementX, e.movementY);
+            }
+        });
+        addEventListener('resize', () => {
+            camera.aspect = innerWidth / innerHeight;
+            camera.updateProjectionMatrix();
+            renderer.setSize(innerWidth, innerHeight);
+        });
+        this.last = performance.now();
+        requestAnimationFrame(t => this.loop(t));
+    },
+    setState(s) {
+        this.state = s;
+        const playing = s === 'playing';
+        this.el.menu.style.display = playing ? 'none' : 'flex';
+        this.el.cross.style.display = this.el.hint.style.display = playing ? 'block' : 'none';
+        this.el.play.textContent = s === 'paused' ? 'Resume' : 'Start';
+        this.el.sub.textContent = s === 'paused' ? 'Paused' : 'Main Menu';
+    },
+    loop(now) {
+        const dt = Math.min((now - this.last) / 1000, 0.05);
+        this.last = now;
+        if (this.state === 'playing') {
+            Player.update(dt);
+        }
+        Door.update(dt);
+        this.el.tip.style.display = this.state === 'playing' && Door.near() ? 'block' : 'none';
+        this.el.tip.textContent = Door.open ? 'E: close door' : 'E: open door';
+        renderer.render(scene, camera);
+        requestAnimationFrame(t => this.loop(t));
+    }
+};
+
+camera.position.set(0, CONFIG.eye, 42);
+Game.init();
+</script>
+</body>
+</html>
