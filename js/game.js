@@ -13,6 +13,7 @@ const Game = {
             this.el[id] = document.getElementById(id);
         }
         Input.init();
+        Arsenal.init();
         MapView.init();
 
         const on = (id, fn) => document.getElementById(id).addEventListener('click', fn);
@@ -191,9 +192,10 @@ const Game = {
         if (this.state === 'playing') {
             Player.update(dt);
             this.updateRoom(dt);
+            Arsenal.update(dt);
         }
         if (this.room && this.state !== 'mapview') {
-            renderer.render(scene, camera);
+            Arsenal.render();
         }
         requestAnimationFrame(t => this.loop(t));
     }
