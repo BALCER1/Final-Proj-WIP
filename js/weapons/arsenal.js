@@ -2,7 +2,7 @@
 // Owns the four guns, switches between them (1-4 / mouse wheel), feeds them input and player movement,
 // does hitscan against the current room, and draws them with WeaponView.
 //
-// Hook-up:
+// Hook-up (see WEAPONS.md):
 //   Game.init()  -> Arsenal.init();
 //   Game.loop()  -> if (this.state === 'playing') Arsenal.update(dt);
 //                   replace renderer.render(scene, camera) with Arsenal.render();
@@ -13,8 +13,8 @@ const Arsenal = {
     view: null,
     ray: new THREE.Raycaster(),
     hud: null,
-    // Called for every pellet that hits something: (hit, shot) where hit is a THREE.Raycaster
-    // intersection. Point this at your enemy damage code later.
+    // Called for every pellet that hits something: (hit, shot) where hit is { point, normal, object,
+    // distance }. Point this at your enemy damage code later.
     onHit: null,
 
     init() {
@@ -22,7 +22,11 @@ const Arsenal = {
         this.view = new WeaponView(camera, { fov: 55 });
         this.view.shareLights(scene);
         for (const id of Weapons.order) {
-            const w = new Weapon(id, { worldParent: scene, onShot: shot => this.shoot(shot) });
+            const w = new Weapon(id, {
+                worldParent: scene,
+                trace: (origin, dir, range) => this.trace(origin, dir, range),
+                onShot: shot => this.shoot(shot)
+            });
             this.view.attach(w);
             this.weapons[id] = w;
         }
@@ -78,7 +82,7 @@ const Arsenal = {
         if (this.current) {
             camera.remove(this.current.root);
             this.current.setTrigger(false);
-            this.current.fx.clear();
+            this.current.clearEffects();
         }
         this.current = this.weapons[id];
         camera.add(this.current.root);
@@ -103,31 +107,32 @@ const Arsenal = {
         this.view.render(renderer, scene);
     },
 
-    // Hitscan every pellet against the current room and leave a little spore splash where it lands.
-    shoot(shot) {
+    // Where a pellet lands in the current room. The weapon flies its projectile there and splashes it.
+    trace(origin, dir, range) {
         const room = typeof Game !== 'undefined' && Game.room;
         if (!room) {
+            return null;
+        }
+        this.ray.set(origin, dir);
+        this.ray.far = range;
+        const hit = this.ray.intersectObject(room.group, true)[0];
+        if (!hit) {
+            return null;
+        }
+        const normal = hit.face ? hit.face.normal.clone().transformDirection(hit.object.matrixWorld) : dir.clone().negate();
+        return { point: hit.point, normal, object: hit.object, distance: hit.distance };
+    },
+
+    // Damage is instant (hitscan); shot.hits[i] is what pellet i hit, or null.
+    shoot(shot) {
+        if (!this.onHit || !shot.hits) {
             return;
         }
-        const color = Weapons.get(shot.weapon).color;
-        for (const dir of shot.dirs) {
-            this.ray.set(shot.origin, dir);
-            this.ray.far = shot.range;
-            const hit = this.ray.intersectObject(room.group, true)[0];
-            if (!hit) {
-                continue;
-            }
-            const n = hit.face ? hit.face.normal.clone().transformDirection(hit.object.matrixWorld) : dir.clone().negate();
-            const fx = this.current.fx;
-            for (let i = 0; i < 6; i++) {
-                const v = WeaponKit.sphereDir().multiplyScalar(0.8).addScaledVector(n, 1.2);
-                fx.emit({ world: true, pos: hit.point, vel: v, life: 0.35, size: 0.02, sizeEnd: 0.004, color, drag: 3, gravity: 2 });
-            }
-            fx.emit({ world: true, pos: hit.point.clone().addScaledVector(n, 0.02), vel: n.clone().multiplyScalar(0.3), life: 0.6, size: 0.04, sizeEnd: 0.14, color: 0xcfc6a8, additive: false, opacity: 0.35, drag: 3 });
-            if (this.onHit) {
+        shot.hits.forEach(hit => {
+            if (hit) {
                 this.onHit(hit, shot);
             }
-        }
+        });
     },
 
     makeHud() {

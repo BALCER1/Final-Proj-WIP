@@ -14,6 +14,12 @@ Weapons.register('shotgun', {
         kick: { back: 0.12, up: 0.22, roll: 0.05 }
     },
     color: 0xb8ff4d,
+    // nine little green spore pellets with short, sparse trails
+    projectile: {
+        speed: 55, size: 0.016, stretch: 2.5, color: 0xb8ff4d, core: 0xf4ffd6, maxDist: 28,
+        trail: { spacing: 0.55, life: 0.18, size: 0.011, drift: 0.25, sparks: 0.08, length: 10 },
+        impact: { count: 3, size: 0.016 }
+    },
 
     build(b, w) {
         const C = {

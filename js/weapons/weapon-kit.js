@@ -268,7 +268,7 @@ class WeaponBuilder {
             this.wobble(geo, opts.wobble, opts.freq || 40, opts.seed || 0);
         }
         const m = this.mesh(geo, mat, parent);
-        m.userData.tube = { tub, rad };
+        m.userData.tube = { tub, rad, curve, r0, r1 };
         if (opts.ends) {
             const a = points[0];
             const b = points[points.length - 1];
@@ -276,6 +276,30 @@ class WeaponBuilder {
             this.sphere(r1, mat, parent, b, null, { ws: 10, hs: 8 });
         }
         return m;
+    }
+
+    // Rounded box centred on its position: w along X, h along Y, d along Z.
+    rbox(w, h, d, r, mat, parent, pos, rot) {
+        const bev = Math.min(r * 0.5, w * 0.2, h * 0.2, d * 0.2);
+        const W = w - 2 * bev;
+        const H = h - 2 * bev;
+        const R = Math.min(r, W / 2, H / 2);
+        const s = new THREE.Shape();
+        s.moveTo(-W / 2 + R, -H / 2);
+        s.lineTo(W / 2 - R, -H / 2);
+        s.quadraticCurveTo(W / 2, -H / 2, W / 2, -H / 2 + R);
+        s.lineTo(W / 2, H / 2 - R);
+        s.quadraticCurveTo(W / 2, H / 2, W / 2 - R, H / 2);
+        s.lineTo(-W / 2 + R, H / 2);
+        s.quadraticCurveTo(-W / 2, H / 2, -W / 2, H / 2 - R);
+        s.lineTo(-W / 2, -H / 2 + R);
+        s.quadraticCurveTo(-W / 2, -H / 2, -W / 2 + R, -H / 2);
+        const geo = new THREE.ExtrudeGeometry(s, {
+            depth: Math.max(0.0001, d - 2 * bev), bevelEnabled: true,
+            bevelThickness: bev, bevelSize: bev, bevelSegments: 2, curveSegments: 4
+        });
+        geo.center();
+        return this.mesh(geo, mat, parent, pos, rot);
     }
 
     // Mushroom cap with the dome pointing +Y; the origin sits on the rim plane.
@@ -371,7 +395,7 @@ class SporeFX {
             dot: new THREE.IcosahedronGeometry(1, 1),
             ring: new THREE.TorusGeometry(1, 0.07, 6, 32)
         };
-        this.max = 450;
+        this.max = 500;
         this.layer = 0; // render layer for rig-space particles (set by WeaponView)
         this.acc = {};
         this._v = new THREE.Vector3();
@@ -521,13 +545,224 @@ class SporeFX {
     }
 }
 
+// Small visual projectiles: a glowing spore that flies from the muzzle to where the shot lands and
+// leaves a trail of spores behind it. Cheap on purpose: two pooled meshes per projectile (core +
+// halo, sharing materials per colour) and the trail is drawn with the weapon's SporeFX pool.
+// Damage stays hitscan (instant); projectiles are the visible part and splash when they arrive.
+//
+// def.projectile = {
+//   speed, size, stretch, color, core,          head: m/s, radius, length factor, halo + core colour
+//   trail: { spacing, life, size, color, drift, sparks, length },  spores every `spacing` m, for the first `length` m
+//   spiral: { radius, freq, strands },          optional helix of spores around the path (sniper)
+//   wobble,                                     sideways weave amplitude in metres (pistols)
+//   maxDist, impact: { count, size, ring }      distance when nothing is hit, splash on arrival
+// }
+class SporeProjectiles {
+    constructor(fx) {
+        this.fx = fx;
+        this.live = [];
+        this.pool = [];
+        this.mats = {};
+        this.geo = new THREE.IcosahedronGeometry(1, 1);
+        this.max = 64;
+        this._a = new THREE.Vector3();
+        this._b = new THREE.Vector3();
+        this._p = new THREE.Vector3();
+        this._z = new THREE.Vector3(0, 0, 1);
+    }
+
+    mat(color, opacity) {
+        const key = color + ':' + opacity;
+        if (!this.mats[key]) {
+            this.mats[key] = new THREE.MeshBasicMaterial({
+                color, transparent: true, opacity, blending: THREE.AdditiveBlending, depthWrite: false
+            });
+        }
+        return this.mats[key];
+    }
+
+    spawn(from, to, cfg, hit) {
+        const parent = this.fx.worldParent;
+        if (!parent || this.live.length >= this.max) {
+            return;
+        }
+        let p = this.pool.pop();
+        if (!p) {
+            p = {
+                core: new THREE.Mesh(this.geo),
+                halo: new THREE.Mesh(this.geo),
+                from: new THREE.Vector3(),
+                dir: new THREE.Vector3(),
+                pos: new THREE.Vector3(),
+                side: new THREE.Vector3(),
+                up: new THREE.Vector3()
+            };
+            p.core.frustumCulled = p.halo.frustumCulled = false;
+        }
+        p.core.material = this.mat(cfg.core || 0xffffff, 1);
+        p.halo.material = this.mat(cfg.color, 0.55);
+        parent.add(p.core);
+        parent.add(p.halo);
+        p.core.visible = p.halo.visible = true;
+        p.cfg = cfg;
+        p.hit = hit || null;
+        p.from.copy(from);
+        p.dir.copy(to).sub(from);
+        p.dist = Math.max(0.01, p.dir.length());
+        p.dir.multiplyScalar(1 / p.dist);
+        // two axes across the flight path, for spirals and weaving
+        p.side.set(0, 1, 0).cross(p.dir);
+        if (p.side.lengthSq() < 1e-6) {
+            p.side.set(1, 0, 0);
+        }
+        p.side.normalize();
+        p.up.copy(p.dir).cross(p.side).normalize();
+        p.travelled = 0;
+        p.dropped = 0;
+        p.age = 0;
+        p.phase = Math.random() * Math.PI * 2;
+        p.pos.copy(from);
+        this.live.push(p);
+    }
+
+    // Point on the flight path at distance d, including the optional weave.
+    at(p, d, out) {
+        out.copy(p.from).addScaledVector(p.dir, d);
+        const w = p.cfg.wobble;
+        if (w) {
+            const fade = Math.min(1, d / 2);
+            out.addScaledVector(p.side, Math.sin(d * 2.2 + p.phase) * w * fade);
+            out.addScaledVector(p.up, Math.cos(d * 1.7 + p.phase) * w * 0.6 * fade);
+        }
+        return out;
+    }
+
+    update(dt) {
+        const K = WeaponKit;
+        const fx = this.fx;
+        for (let i = this.live.length - 1; i >= 0; i--) {
+            const p = this.live[i];
+            const c = p.cfg;
+            p.age += dt;
+            p.travelled = Math.min(p.dist, p.travelled + c.speed * dt);
+            this.at(p, p.travelled, p.pos);
+
+            // head: stretched along the path, halo flickers a little
+            const s = c.size;
+            const q = p.core.quaternion.setFromUnitVectors(this._z, p.dir);
+            p.halo.quaternion.copy(q);
+            p.core.position.copy(p.pos);
+            p.halo.position.copy(p.pos);
+            p.core.scale.set(s * 0.45, s * 0.45, s * 0.45 * (c.stretch || 1));
+            const fl = 1 + Math.sin(p.age * 60 + p.phase) * 0.15;
+            p.halo.scale.set(s * fl, s * fl, s * fl * (c.stretch || 1) * 1.2);
+
+            // trail: drop spores at fixed spacing along the distance covered this frame
+            const t = c.trail;
+            if (t) {
+                const spacing = t.spacing || 0.4;
+                const end = Math.min(p.travelled, t.length || 25);
+                let budget = 10;
+                while (p.dropped + spacing <= end && budget-- > 0) {
+                    p.dropped += spacing;
+                    const pt = this.at(p, p.dropped, this._a);
+                    if (c.spiral) {
+                        const strands = c.spiral.strands || 1;
+                        for (let k = 0; k < strands; k++) {
+                            const a = p.phase + p.dropped * c.spiral.freq + (k / strands) * Math.PI * 2;
+                            const r = c.spiral.radius * Math.min(1, p.dropped / 1.5);
+                            this._b.copy(pt).addScaledVector(p.side, Math.cos(a) * r).addScaledVector(p.up, Math.sin(a) * r);
+                            fx.emit({ world: true, pos: this._b, vel: this._p.set(0, 0, 0), life: t.life * 1.3, size: t.size * 0.8, sizeEnd: 0, color: c.spiral.color || t.color || c.color, drag: 1 });
+                        }
+                    }
+                    const drift = t.drift || 0.15;
+                    fx.emit({
+                        world: true, pos: pt, vel: K.sphereDir(this._p).multiplyScalar(drift),
+                        life: t.life * K.rand(0.7, 1.2), size: t.size * K.rand(0.7, 1.2), sizeEnd: 0,
+                        color: t.color || c.color, drag: 2, fadeIn: 0.01
+                    });
+                    if (t.sparks && Math.random() < t.sparks) {
+                        fx.emit({ world: true, pos: pt, vel: K.sphereDir(this._p).multiplyScalar(K.rand(0.4, 1.2)), life: 0.3, size: t.size * 0.5, sizeEnd: 0, color: c.core || 0xffffff, drag: 3, gravity: 1.5 });
+                    }
+                }
+                if (budget <= 0) {
+                    p.dropped = end; // skip ahead rather than flood the pool
+                }
+            }
+
+            if (p.travelled >= p.dist || p.age > 4) {
+                this.impact(p);
+                this.recycle(i);
+            }
+        }
+    }
+
+    impact(p) {
+        const c = p.cfg;
+        const imp = c.impact || {};
+        const fx = this.fx;
+        const K = WeaponKit;
+        if (!p.hit) {
+            // faded out in the air: a small puff
+            for (let i = 0; i < 3; i++) {
+                fx.emit({ world: true, pos: p.pos, vel: K.sphereDir(this._p).multiplyScalar(0.3), life: 0.3, size: c.size * 0.6, sizeEnd: 0, color: c.color, drag: 3 });
+            }
+            return;
+        }
+        const n = p.hit.normal || this._b.copy(p.dir).negate();
+        const count = imp.count || 6;
+        const size = imp.size || 0.02;
+        for (let i = 0; i < count; i++) {
+            const v = K.sphereDir(this._p).multiplyScalar(0.9).addScaledVector(n, 1.3).multiplyScalar(K.rand(0.6, 1.4));
+            fx.emit({ world: true, pos: p.hit.point, vel: v, life: K.rand(0.25, 0.45), size, sizeEnd: 0.003, color: i % 3 ? c.color : (c.core || 0xffffff), drag: 3, gravity: 2.5, stretch: 0.02 });
+        }
+        const puffPos = this._a.copy(p.hit.point).addScaledVector(n, 0.03);
+        fx.emit({ world: true, pos: puffPos, vel: this._p.copy(n).multiplyScalar(0.3), life: 0.7, size: size * 2, sizeEnd: size * 6, color: 0xcfc6a8, additive: false, opacity: 0.35, drag: 3, fadeIn: 0.03 });
+        fx.emit({ world: true, pos: puffPos, vel: this._p.set(0, 0, 0), life: 0.5, size: size * 1.5, sizeEnd: size * 0.5, color: c.color, opacity: 0.8, drag: 0 });
+        if (imp.ring) {
+            fx.emit({ world: true, shape: 'ring', pos: puffPos, dir: n, vel: this._p.set(0, 0, 0), life: 0.3, size: size * 1.5, sizeEnd: imp.ring, color: c.color, opacity: 0.9 });
+        }
+    }
+
+    recycle(i) {
+        const p = this.live[i];
+        p.core.visible = p.halo.visible = false;
+        this.live.splice(i, 1);
+        this.pool.push(p);
+    }
+
+    clear() {
+        for (let i = this.live.length - 1; i >= 0; i--) {
+            this.recycle(i);
+        }
+    }
+
+    dispose() {
+        this.clear();
+        for (const p of this.pool) {
+            for (const m of [p.core, p.halo]) {
+                if (m.parent) {
+                    m.parent.remove(m);
+                }
+            }
+        }
+        this.pool.length = 0;
+        for (const k in this.mats) {
+            this.mats[k].dispose();
+        }
+        this.geo.dispose();
+    }
+}
+
 const _wv = new THREE.Vector3();
 const _wq = new THREE.Quaternion();
 
 class Weapon {
     /**
-     * new Weapon(id, { worldParent: scene, onShot: shot => {...} })
-     * worldParent: where muzzle smoke/spores are left behind (usually the scene). Optional.
+     * new Weapon(id, { worldParent: scene, trace: (origin, dir, range) => hit, onShot: shot => {...} })
+     * worldParent: where muzzle smoke, spores and projectiles live (usually the scene). Optional.
+     * trace:       finds what each pellet hits, so projectiles fly to it and splash there. Optional.
+     * onShot:      called per trigger pull with the shot, including shot.hits[i] per pellet.
      */
     constructor(id, opts = {}) {
         const def = Weapons.get(id);
@@ -558,7 +793,10 @@ class Weapon {
             this.rig.add(o);
         }
         this.fx = new SporeFX(this.rig, opts.worldParent);
+        this.projectiles = new SporeProjectiles(this.fx);
         this.onShot = opts.onShot || null;
+        // trace(origin, dir, range) -> { point, normal, object } | null. Decides where shots land.
+        this.trace = opts.trace || null;
         this.view = null;
 
         this.ammo = this.stats.mag;
@@ -686,9 +924,27 @@ class Weapon {
         if (this.def.onFire) {
             this.def.onFire(this, side);
         }
-        if (this.onShot) {
-            this.onShot(this.makeShot(side));
+        const shot = this.makeShot(side);
+        if (this.trace) {
+            shot.hits = shot.dirs.map(d => this.trace(shot.origin, d, shot.range));
         }
+        if (this.onShot) {
+            this.onShot(shot);
+        }
+        const cfg = this.def.projectile;
+        if (cfg) {
+            shot.dirs.forEach((d, i) => {
+                const hit = shot.hits && shot.hits[i];
+                const end = hit ? hit.point : shot.origin.clone().addScaledVector(d, Math.min(shot.range, cfg.maxDist || 60));
+                this.projectiles.spawn(shot.muzzle, end, cfg, hit);
+            });
+        }
+    }
+
+    // Drop every particle and projectile in flight (e.g. when switching weapons).
+    clearEffects() {
+        this.projectiles.clear();
+        this.fx.clear();
     }
 
     // Hitscan info: rays start at the eye (the camera this weapon is attached to) so shots
@@ -751,6 +1007,7 @@ class Weapon {
         if (this.def.effects) {
             this.def.effects(this, dt);
         }
+        this.projectiles.update(dt);
         this.fx.update(dt);
 
         this.prevActT = this.actT;
@@ -827,6 +1084,7 @@ class Weapon {
         if (this.root.parent) {
             this.root.parent.remove(this.root);
         }
+        this.projectiles.dispose();
         this.fx.dispose();
         const geos = new Set();
         const mats = new Set();

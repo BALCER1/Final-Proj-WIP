@@ -15,6 +15,12 @@ Weapons.register('rifle', {
         kick: { back: 0.028, up: 0.04, roll: 0.02 }
     },
     color: 0xffc44a,
+    // golden tracer spore with a glittering powder trail
+    projectile: {
+        speed: 80, size: 0.015, stretch: 5, color: 0xffc44a, core: 0xfff3c8, maxDist: 60,
+        trail: { spacing: 0.3, life: 0.24, size: 0.009, drift: 0.12, sparks: 0.12, length: 20 },
+        impact: { count: 7, size: 0.018 }
+    },
 
     build(b) {
         const C = {
@@ -233,7 +239,6 @@ Weapons.register('rifle', {
         if (w.atFire(0)) {
             const o = w.worldPos(P.muzzle);
             const d = w.worldDir(P.muzzle);
-            fx.emit({ world: true, pos: o, vel: d.clone().multiplyScalar(45), life: 0.12, size: 0.005, sizeEnd: 0.004, color: 0xffe9a8, drag: 0, stretch: 0.005 });
             for (let i = 0; i < 7; i++) {
                 fx.emit({ world: true, pos: o, vel: K.cone(d, 0.35).multiplyScalar(K.rand(1.5, 3.5)), life: K.rand(0.2, 0.4), size: 0.006, sizeEnd: 0.001, color: gold, drag: 3, stretch: 0.01 });
             }

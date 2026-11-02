@@ -16,6 +16,13 @@ Weapons.register('sniper', {
         kick: { back: 0.15, up: 0.3, roll: 0.06 }
     },
     color: 0xc77dff,
+    // charged violet bolt with two spore strands spiralling round its trail
+    projectile: {
+        speed: 130, size: 0.028, stretch: 8, color: 0xc77dff, core: 0xffffff, maxDist: 120,
+        trail: { spacing: 0.32, life: 0.5, size: 0.013, drift: 0.08, sparks: 0.15, length: 28 },
+        spiral: { radius: 0.06, freq: 2.6, strands: 2, color: 0xffd6f6 },
+        impact: { count: 14, size: 0.026, ring: 0.35 }
+    },
 
     build(b) {
         const C = {
@@ -195,7 +202,6 @@ Weapons.register('sniper', {
         if (w.atFire(0)) {
             const o = w.worldPos(P.muzzle);
             const d = w.worldDir(P.muzzle);
-            fx.emit({ world: true, pos: o, vel: d.clone().multiplyScalar(80), life: 0.14, size: 0.008, sizeEnd: 0.006, color: 0xf0d8ff, drag: 0, stretch: 0.006 });
             for (const [s0, s1, life, sp] of [[0.03, 0.22, 0.25, 2], [0.02, 0.13, 0.18, 4]]) {
                 fx.emit({ world: true, shape: 'ring', pos: o, dir: d, vel: d.clone().multiplyScalar(sp), life, size: s0, sizeEnd: s1, color: glow, opacity: 0.9 });
             }
