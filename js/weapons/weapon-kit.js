@@ -822,6 +822,7 @@ class Weapon {
         this._prevRig = new THREE.Vector3();
         this.setState('draw', false);
 
+        this.move = {};
         this.moveBlend = 0;
         this.sprintBlend = 0;
         this.airBlend = 0;
@@ -848,13 +849,14 @@ class Weapon {
         this.trigger = down;
     }
     // Alternate fire (right mouse). What it does is up to the weapon def (altPress / altRelease / altTick).
+    // Like the trigger, it can't be started while sprinting.
     setAlt(down) {
         if (down && !this.altHeld) {
             this.altHeld = true;
             if (this.state === 'inspect') {
                 this.setState('ready');
             }
-            if (this.def.altPress) {
+            if (this.def.altPress && !this.move.sprinting) {
                 this.def.altPress(this);
             }
         } else if (!down && this.altHeld) {
@@ -1054,6 +1056,7 @@ class Weapon {
      * move: { speed: horizontal speed m/s, sprinting: bool, grounded: bool }
      */
     update(dt, move = {}) {
+        this.move = move;
         if (this.view) {
             this.view.sync();
         }

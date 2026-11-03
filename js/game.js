@@ -1,4 +1,4 @@
-// Game state: main menu -> map -> room -> map -> ... -> boss -> run complete.
+// Game state: intro -> main menu -> map -> room -> map -> ... -> boss -> run complete.
 // Only the room the player is standing in exists; it is built on entry and disposed on exit.
 
 const Game = {
@@ -9,10 +9,11 @@ const Game = {
     el: {},
 
     init() {
-        for (const id of ['mainMenu', 'optionsMenu', 'pauseMenu', 'mapScreen', 'endScreen', 'quitScreen', 'hud', 'tip', 'mapBackBtn', 'stageLabel', 'warn', 'sens']) {
+        for (const id of ['mainMenu', 'optionsMenu', 'pauseMenu', 'mapScreen', 'endScreen', 'quitScreen', 'hud', 'tip', 'mapBackBtn', 'stageLabel', 'warn']) {
             this.el[id] = document.getElementById(id);
         }
         Input.init();
+        Settings.init();
         Arsenal.init();
         MapView.init();
 
@@ -28,12 +29,11 @@ const Game = {
         on('quitBackBtn', () => this.setState('menu'));
         on('mapBackBtn', () => this.closeBrowse());
 
-        this.el.sens.oninput = () => {
-            CONFIG.sensitivity = this.el.sens.value * 0.0005;
-        };
-        this.el.sens.oninput();
-
         addEventListener('keydown', e => {
+            // With Esc keyboard-locked in fullscreen the browser no longer frees the mouse itself.
+            if (e.code === 'Escape' && this.state === 'playing') {
+                document.exitPointerLock();
+            }
             if (e.code === 'KeyM' && !e.repeat) {
                 if (this.state === 'playing') {
                     this.browseMap();
@@ -62,7 +62,8 @@ const Game = {
             }
         });
 
-        this.setState('menu');
+        this.setState('intro');
+        Intro.play(() => this.setState('menu'));
         this.last = performance.now();
         requestAnimationFrame(t => this.loop(t));
     },

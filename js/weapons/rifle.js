@@ -224,11 +224,11 @@ Weapons.register('rifle', {
         w.data.burst = Math.min(3, w.ammo);
         w.data.burstLeft = w.data.burst;
     },
-    altTick(w) {
+    altTick(w, dt, move) {
         if (w.data.burst <= 0) {
             return;
         }
-        if (w.state !== 'ready') {
+        if (w.state !== 'ready' || (move && move.sprinting)) {
             w.data.burst = 0;
             return;
         }

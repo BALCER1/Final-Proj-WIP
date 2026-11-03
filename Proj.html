@@ -3,7 +3,14 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<title>Proj</title>
+<title>FungDung</title>
+<script>
+  try {
+    if ((JSON.parse(localStorage.getItem('fungdung.settings')) || {}).darkMode) {
+      document.documentElement.classList.add('dark');
+    }
+  } catch (e) {}
+</script>
 <style>
   html,
   body {
@@ -150,6 +157,187 @@
   #hud {
     pointer-events: none;
   }
+
+  /* ---------- Theme (menus only; html.dark is set by Settings) ---------- */
+  :root {
+    --bg: #fff;
+    --overlay: rgba(255, 255, 255, .94);
+    --panel: #fff;
+    --line: #ecc;
+    --text: #333;
+    --muted: #888;
+    --sub: #b07070;
+    --red: #d42424;
+    --red-dark: #b01c1c;
+  }
+
+  html.dark {
+    --bg: #121012;
+    --overlay: rgba(18, 16, 18, .94);
+    --panel: #1c191c;
+    --line: #3a2a2a;
+    --text: #e6e0e0;
+    --muted: #8a8080;
+    --sub: #c08080;
+    --red: #e03a3a;
+    --red-dark: #c42828;
+  }
+
+  html.dark select {
+    color-scheme: dark;
+  }
+
+  /* ---------- Intro ---------- */
+  #introScreen {
+    z-index: 10;
+    background: var(--bg);
+    transition: opacity .5s ease;
+  }
+
+  #introScreen.out {
+    opacity: 0;
+    pointer-events: none;
+  }
+
+  /* Shared red-on-white wordmark, used by the intro and the main menu. */
+  .screen .logo {
+    margin: 0;
+    font-size: 96px;
+    font-weight: 900;
+    letter-spacing: 2px;
+    color: var(--red);
+    -webkit-font-smoothing: antialiased;
+    text-rendering: geometricPrecision;
+  }
+
+  /* Moved every frame by Intro (js/intro.js); squashes from its base. */
+  .screen #introTitle {
+    font-size: clamp(80px, 11vw, 150px);
+    transform: translate3d(0, 60vh, 0);
+    transform-origin: 50% 100%;
+    will-change: transform;
+    backface-visibility: hidden;
+  }
+
+  /* ---------- Main menu ---------- */
+  #mainMenu {
+    background: var(--bg);
+    animation: fadeIn .5s ease;
+  }
+
+  #mainMenu .logo {
+    margin-bottom: 0;
+    font-size: 80px;
+  }
+
+  #mainMenu .sub {
+    margin-bottom: 26px;
+    font-size: 13px;
+    font-weight: 600;
+    letter-spacing: 5px;
+    text-transform: uppercase;
+    color: var(--sub);
+  }
+
+  #mainMenu button,
+  #optionsMenu > button {
+    font-weight: 600;
+    color: #fff;
+    background: var(--red);
+    border: none;
+    border-radius: 6px;
+    transition: background .15s ease, transform .15s ease;
+  }
+
+  #mainMenu button:hover,
+  #optionsMenu > button:hover {
+    background: var(--red-dark);
+    transform: translateY(-1px);
+  }
+
+  @keyframes fadeIn {
+    from { opacity: 0; }
+  }
+
+  /* ---------- Settings ---------- */
+  #optionsMenu {
+    color: var(--text);
+    background: var(--overlay);
+  }
+
+  #optionsMenu h1 {
+    font-weight: 900;
+    color: var(--red);
+  }
+
+  #optionsMenu p {
+    color: var(--muted);
+  }
+
+  .panel {
+    width: min(520px, 90vw);
+    padding: 18px 22px 22px;
+    background: var(--panel);
+    border: 1px solid var(--line);
+    border-radius: 8px;
+    box-shadow: 0 6px 24px rgba(212, 36, 36, .1);
+  }
+
+  .panel input {
+    accent-color: var(--red);
+  }
+
+  .tabs {
+    display: flex;
+    gap: 4px;
+    margin-bottom: 16px;
+    border-bottom: 1px solid var(--line);
+  }
+
+  .screen .tabs button {
+    flex: 1;
+    width: auto;
+    padding: 8px;
+    font-size: 14px;
+    color: var(--muted);
+    background: none;
+    border: none;
+    border-bottom: 2px solid transparent;
+  }
+
+  .screen .tabs button.active {
+    color: var(--red);
+    border-bottom-color: var(--red);
+  }
+
+  .tab {
+    min-height: 170px;
+  }
+
+  .row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    padding: 8px 0;
+    font-size: 15px;
+  }
+
+  .row .ctl {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+
+  .row output {
+    width: 48px;
+    text-align: right;
+    color: var(--red);
+  }
+
+  .row.off {
+    opacity: .4;
+  }
 </style>
 </head>
 <body>
@@ -159,25 +347,79 @@
   <div id="tip" hidden>E: open door</div>
 </div>
 
-<div id="mainMenu" class="screen">
-  <h1>Proj</h1>
+<div id="introScreen" class="screen">
+  <h1 id="introTitle" class="logo">FungDung</h1>
+</div>
+
+<div id="mainMenu" class="screen" hidden>
+  <h1 class="logo">FungDung</h1>
+  <div class="sub">a fungi dungeon roguelite</div>
   <button id="singleBtn">Singleplayer</button>
-  <button id="optionsBtn">Options</button>
+  <button id="optionsBtn">Settings</button>
   <button id="quitBtn">Quit</button>
 </div>
 
 <div id="optionsMenu" class="screen" hidden>
-  <h1>Options</h1>
-  <label>Mouse sensitivity <input id="sens" type="range" min="1" max="10" step="0.5" value="4"></label>
-  <p>WASD move &middot; Space jump &middot; Shift sprint &middot; E interact &middot; M map &middot; Esc pause</p>
-  <p>LMB fire &middot; RMB alt fire &middot; R reload &middot; F inspect &middot; 1-4 / wheel switch weapon</p>
+  <h1>Settings</h1>
+  <div class="panel">
+    <div class="tabs">
+      <button data-tab="graphics">Graphics</button>
+      <button data-tab="display">Display</button>
+      <button data-tab="audio">Audio</button>
+      <button data-tab="controls">Controls</button>
+    </div>
+
+    <div class="tab" data-tab="graphics">
+      <div class="row">Render scale
+        <span class="ctl"><input id="setScale" type="range" min="0.25" max="1" step="0.05"><output id="setScaleOut"></output></span>
+      </div>
+      <div class="row">Upscale filter
+        <select id="setUpscale">
+          <option value="smooth">Smooth</option>
+          <option value="sharp">Sharp (pixelated)</option>
+        </select>
+      </div>
+      <div class="row">Field of view
+        <span class="ctl"><input id="setFov" type="range" min="60" max="110" step="1"><output id="setFovOut"></output></span>
+      </div>
+      <p id="setRes"></p>
+    </div>
+
+    <div class="tab" data-tab="display" hidden>
+      <div class="row">Dark mode
+        <input id="setDark" type="checkbox">
+      </div>
+      <div class="row">Window mode
+        <select id="setFullscreen">
+          <option value="windowed">Windowed</option>
+          <option value="fullscreen">Fullscreen</option>
+        </select>
+      </div>
+      <p>Fullscreen is remembered between sessions. Tapping Esc only pauses; hold Esc to leave fullscreen.</p>
+    </div>
+
+    <div class="tab" data-tab="audio" hidden>
+      <div class="row off">Master volume <input type="range" disabled></div>
+      <div class="row off">Music <input type="range" disabled></div>
+      <div class="row off">Effects <input type="range" disabled></div>
+      <p>No audio yet &mdash; coming soon.</p>
+    </div>
+
+    <div class="tab" data-tab="controls" hidden>
+      <div class="row">Mouse sensitivity
+        <span class="ctl"><input id="sens" type="range" min="1" max="10" step="0.5"><output id="sensOut"></output></span>
+      </div>
+      <p>WASD move &middot; Space jump &middot; Shift sprint &middot; E interact &middot; M map &middot; Esc pause</p>
+      <p>LMB fire &middot; RMB alt fire &middot; R reload &middot; F inspect &middot; 1-4 / wheel switch weapon</p>
+    </div>
+  </div>
   <button id="optionsBackBtn">Back</button>
 </div>
 
 <div id="pauseMenu" class="screen" hidden>
   <h1>Paused</h1>
   <button id="resumeBtn">Resume</button>
-  <button id="pauseOptionsBtn">Options</button>
+  <button id="pauseOptionsBtn">Settings</button>
   <button id="abandonBtn">Quit to Main Menu</button>
   <p id="warn" hidden>Pointer lock was blocked. Click Resume again, or open the page in its own tab.</p>
 </div>
@@ -205,6 +447,8 @@
 <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
 <script src="js/config.js"></script>
 <script src="js/engine.js"></script>
+<script src="js/settings.js"></script>
+<script src="js/intro.js"></script>
 <script src="js/rooms/room-kit.js"></script>
 <script src="js/rooms/start.js"></script>
 <script src="js/rooms/combat.js"></script>
