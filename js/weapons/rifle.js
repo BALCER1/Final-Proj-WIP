@@ -5,9 +5,14 @@
 // Reload: gun rolls over, the cap hatch on top flips open, a spore pouch swings in, tips and
 //         POURS a stream of glowing powder in while the vial visibly fills, then hatch snaps shut
 //         and the mushroom-knob bolt is racked.
+// Alt (right mouse): 3-ROUND BURST. The fire selector flips, three tight, fast, extra-bright
+//         rounds go out, and the burst pips on the side go dark one by one.
+// Inspect: turns the gun to show the vial, taps it (powder swirls, bubbles rise), peeks under the
+//         hatch, then rolls the whole carbine a full turn around the barrel.
 
 Weapons.register('rifle', {
     name: 'Morel Carbine',
+    altName: 'Burst',
     offset: [0.27, -0.17, -0.58],
     stats: {
         mag: 24, rate: 8.5, auto: true, damage: 14, pellets: 1, spread: 0.014, range: 120,
@@ -21,6 +26,12 @@ Weapons.register('rifle', {
         trail: { spacing: 0.3, life: 0.24, size: 0.009, drift: 0.12, sparks: 0.12, length: 20 },
         impact: { count: 7, size: 0.018 }
     },
+    burstProjectile: {
+        speed: 95, size: 0.017, stretch: 7, color: 0xffd36e, core: 0xffffff, maxDist: 70,
+        trail: { spacing: 0.26, life: 0.3, size: 0.01, drift: 0.1, sparks: 0.3, length: 24 },
+        impact: { count: 9, size: 0.02 }
+    },
+    inspect: { time: 3.3 },
 
     build(b) {
         const C = {
@@ -41,7 +52,9 @@ Weapons.register('rifle', {
             gills: b.glow('gillGlow', C.gold, 0.2, { color: C.gill }),
             hatchGlow: b.glow('hatchGlow', C.gold, 0.6),
             pouch: b.mat('pouch', { color: C.pouch, flatShading: true, roughness: 0.95 }),
-            myc: b.mat('myc', { color: C.myc })
+            myc: b.mat('myc', { color: C.myc }),
+            bubble: b.glow('bubble', 0xfff2c8, 1.2, { transparent: true, opacity: 0.85 }),
+            strap: b.mat('strap', { color: 0x5a4430, roughness: 0.9 })
         };
         const model = b.group();
 
@@ -113,6 +126,42 @@ Weapons.register('rifle', {
         b.ring(0.022, 0.004, m.gill, vial, [0, 0.048, 0], [Math.PI / 2, 0, 0]);
         b.ring(0.022, 0.003, m.gill, vial, [0, -0.02, 0], [Math.PI / 2, 0, 0]);
 
+        // Vial cage: three mycelium bars + bubbles that drift up through the powder
+        for (let i = 0; i < 3; i++) {
+            const a = (i / 3) * Math.PI * 2 + 0.5;
+            b.tube([[Math.cos(a) * 0.024, 0.046, Math.sin(a) * 0.024], [Math.cos(a) * 0.026, 0, Math.sin(a) * 0.026], [Math.cos(a) * 0.022, -0.05, Math.sin(a) * 0.022]], 0.0016, 0.0016, m.myc, vial, { seg: 8, radial: 4 });
+        }
+        const bubbles = [];
+        for (let i = 0; i < 5; i++) {
+            const a = i * 2.4;
+            bubbles.push(b.part(b.sphere(0.0022 + (i % 2) * 0.0012, m.bubble, vial, [Math.cos(a) * 0.009, -0.04, Math.sin(a) * 0.009], null, { ws: 6, hs: 4 })));
+        }
+
+        // Fire selector (little cap lever on the left) and three burst pips
+        const selector = b.part(b.group(model, [-0.033, -0.004, 0.045]));
+        b.mesh(new THREE.CylinderGeometry(0.0025, 0.0025, 0.016, 6), m.stem, selector, [0, 0.008, 0]);
+        b.cap(0.007, 0.006, m.cap, null, selector, [0, 0.016, 0], [0, 0, 0], { seg: 10 });
+        b.sphere(0.004, m.stem, selector, [0, 0, 0], null, { ws: 8, hs: 6 });
+        const pips = [];
+        for (let i = 0; i < 3; i++) {
+            const mat = b.glow('pip' + i, C.gold, 0.2, { color: 0x6b5222 });
+            b.sphere(0.0034, mat, model, [-0.0335, 0.012, 0.06 + i * 0.011], null, { ws: 8, hs: 6 });
+            pips.push(mat);
+        }
+
+        // Peep rear sight on a little stalk, compensator slits near the muzzle
+        b.mesh(new THREE.CylinderGeometry(0.003, 0.004, 0.05, 6), m.stem, model, [0, 0.085, 0.07]);
+        b.ring(0.0075, 0.0022, m.cap, model, [0, 0.112, 0.07], null, { ts: 14, rs: 5 });
+        for (let i = 0; i < 3; i++) {
+            b.box(0.008, 0.004, 0.0035, m.dark, model, [0, 0.027, -0.68 - i * 0.009]);
+        }
+
+        // Sling: hangs from a loop under the handguard to the stock and sways as you move
+        b.ring(0.006, 0.0018, m.stem, model, [0, -0.026, -0.3], [0, Math.PI / 2, 0], { ts: 12, rs: 4 });
+        b.ring(0.006, 0.0018, m.stem, model, [0, -0.05, 0.27], [0, Math.PI / 2, 0], { ts: 12, rs: 4 });
+        const sling = b.part(b.group(model, [0, -0.03, 0]));
+        b.tube([[0, 0.004, -0.3], [0.004, -0.06, -0.16], [0.006, -0.1, 0.0], [0.004, -0.085, 0.16], [0, -0.02, 0.27]], 0.0035, 0.0035, m.strap, sling, { seg: 40, radial: 5 });
+
         // Mushroom-knob bolt on the right side
         const bolt = b.part(b.group(model, [0.03, 0.012, 0.02]));
         b.mesh(new THREE.CylinderGeometry(0.005, 0.006, 0.03, 8), m.stem, bolt, [0.015, 0, 0], [0, 0, Math.PI / 2]);
@@ -146,16 +195,55 @@ Weapons.register('rifle', {
         const pouchMouth = b.group(pouch, [0, 0.095, 0]);
         b.part(model);
 
-        return { model, morel, hatch, hatchRim, vial, liquid, bolt, brackets, muzzle, flashes: [flash], pouch, pouchMouth, rigExtras: [pouch], m };
+        return { model, morel, hatch, hatchRim, vial, liquid, bubbles, bolt, brackets, selector, pips, sling, muzzle, flashes: [flash], pouch, pouchMouth, rigExtras: [pouch], m };
     },
 
     init(w) {
         w.data.slosh = new Spring(120, 5);
+        w.data.slingSpring = new Spring(40, 2.2);
         w.data.target = new THREE.Vector3();
+        w.data.burst = 0;
+        w.data.burstLeft = 0; // pips still lit in the current burst
+        w.data.sel = 0;
     },
 
-    onFire(w) {
+    onFire(w, side, o) {
         w.data.slosh.kick(2 + Math.random() * 2);
+        w.data.slingSpring.kick(o && o.mode === 'burst' ? 1.5 : 0.6);
+    },
+
+    // ---- alt fire: 3-round burst ----
+    altPress(w) {
+        if (w.state !== 'ready' || w.cooldown > 0 || w.data.burst > 0) {
+            return;
+        }
+        if (w.ammo <= 0) {
+            w.reload();
+            return;
+        }
+        w.data.burst = Math.min(3, w.ammo);
+        w.data.burstLeft = w.data.burst;
+    },
+    altTick(w) {
+        if (w.data.burst <= 0) {
+            return;
+        }
+        if (w.state !== 'ready') {
+            w.data.burst = 0;
+            return;
+        }
+        if (w.cooldown <= 0) {
+            w.data.burst--;
+            w.data.burstLeft = w.data.burst;
+            w.fire({
+                mode: 'burst', spread: 0.006, kickScale: 0.85, flashScale: 1.35,
+                cooldown: w.data.burst > 0 ? 1 / 16 : 0.4,
+                projectile: this.burstProjectile
+            });
+        }
+    },
+    cancel(w) {
+        w.data.burst = 0;
     },
 
     fill(w) {
@@ -182,6 +270,44 @@ Weapons.register('rifle', {
         P.brackets.forEach((g, i) => {
             g.rotation.x += w.data.slosh.x * 0.02 * (i % 3 - 1);
         });
+
+        // sling sway, bubbles, selector + burst pips
+        P.sling.rotation.z += w.dangle(w.data.slingSpring, dt, 1.4) * 0.6;
+        P.sling.rotation.x += w.data.slingSpring.v * 0.01;
+        P.bubbles.forEach((bub, i) => {
+            const ph = (w.time * (0.25 + i * 0.07) + i * 0.37) % 1;
+            bub.position.y = -0.045 + ph * 0.095 * Math.max(0.05, fill);
+            bub.position.x += Math.sin(w.time * 3 + i) * 0.002;
+            bub.visible = fill > 0.05;
+        });
+        const burstOn = w.data.burst > 0 || (w.lastMode === 'burst' && f < 0.35);
+        w.data.sel = K.lerp(w.data.sel, burstOn ? 1 : 0, Math.min(1, dt * 18));
+        P.selector.rotation.x -= w.data.sel * 1.1;
+        P.pips.forEach((mat, i) => {
+            const lit = burstOn ? (i < w.data.burstLeft ? 1 : 0) : 0.15;
+            mat.emissiveIntensity = 0.15 + lit * 1.8 + (burstOn ? 0 : Math.sin(w.time * 2 + i) * 0.05);
+        });
+
+        // inspect: show the vial, tap it, peek the hatch, then roll the carbine a full turn
+        const it = w.inspectT;
+        if (it >= 0) {
+            const env = K.e('inOutCubic', it, 0, 0.5) * (1 - K.e('inOutCubic', it, 2.75, 3.3));
+            // swing muzzle-right so the whole left side (vial, selector, pips) faces you
+            P.model.rotation.y -= env * 1.05;
+            P.model.rotation.x += env * 0.12;
+            P.model.rotation.z -= env * 0.15;
+            P.model.position.x -= env * 0.2;
+            P.model.position.y += env * 0.07;
+            P.model.position.z += env * 0.06;
+            P.vial.rotation.z += K.hump(it, 0.85, 1.0) * 0.25;
+            P.liquid.rotation.z += K.hump(it, 0.85, 1.3) * 0.15 * Math.sin(it * 30);
+            if (w.atAct(0.9)) {
+                w.data.slosh.kick(8);
+            }
+            P.hatch.rotation.x += K.hump(it, 1.25, 1.75) * 0.9;
+            P.model.rotation.z += K.e('inOutCubic', it, 1.9, 2.65) * Math.PI * 2;
+            P.bolt.position.z += K.hump(it, 2.75, 3.0) * 0.03;
+        }
 
         if (r < 0) {
             return;
@@ -236,6 +362,22 @@ Weapons.register('rifle', {
         const K = WeaponKit;
         const gold = this.color;
 
+        if (w.inspectT >= 0 && w.atAct(0.92)) {
+            const p = w.localPos(P.vial, [0, 0.0, 0]);
+            for (let i = 0; i < 10; i++) {
+                fx.emit({ pos: p, vel: K.sphereDir().multiplyScalar(0.06), attract: p, pull: 0.5, swirl: 4, life: 0.8, size: 0.003, color: gold, drag: 1, fadeIn: 0.05 });
+            }
+        }
+        if (w.atFire(0) && w.lastMode === 'burst') {
+            const o = w.worldPos(P.muzzle);
+            const d = w.worldDir(P.muzzle);
+            fx.emit({ world: true, shape: 'ring', pos: o, dir: d, vel: d.clone().multiplyScalar(2.5), life: 0.16, size: 0.02, sizeEnd: 0.09, color: 0xffffff, opacity: 0.8 });
+            for (let i = 0; i < 6; i++) {
+                const a = (i / 6) * Math.PI * 2;
+                const side = new THREE.Vector3(Math.cos(a), Math.sin(a), 0).applyQuaternion(P.muzzle.getWorldQuaternion(new THREE.Quaternion()));
+                fx.emit({ world: true, pos: o, vel: side.multiplyScalar(1.2).addScaledVector(d, 1), life: 0.2, size: 0.004, sizeEnd: 0, color: gold, drag: 4, stretch: 0.02 });
+            }
+        }
         if (w.atFire(0)) {
             const o = w.worldPos(P.muzzle);
             const d = w.worldDir(P.muzzle);

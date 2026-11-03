@@ -135,6 +135,7 @@ const Game = {
         this.def.build(b, node);
         this.room = b;
         Player.reset(b);
+        Arsenal.reset();
         scene.background = new THREE.Color(b.background);
         scene.fog = b.fog;
         this.el.stageLabel.textContent = `Stage ${node.layer + 1} / ${RunMap.layers.length} - ${this.def.name}`;

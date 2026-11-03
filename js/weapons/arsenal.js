@@ -1,6 +1,7 @@
 // Arsenal: glue between the mushroom weapons and Proj's engine (scene, camera, renderer, Player, Game).
 // Owns the four guns, switches between them (1-4 / mouse wheel), feeds them input and player movement,
 // does hitscan against the current room, and draws them with WeaponView.
+// Controls: LMB fire, RMB alt fire (charge / burst / scope / throw), R reload, F inspect.
 //
 // Hook-up (see WEAPONS.md):
 //   Game.init()  -> Arsenal.init();
@@ -21,6 +22,14 @@ const Arsenal = {
         scene.add(camera); // the guns are children of the camera, so the camera must be in the scene
         this.view = new WeaponView(camera, { fov: 55 });
         this.view.shareLights(scene);
+        this.view.addLights();
+        this.scope = new ScopeOverlay();
+        // slow the mouse down while scoped in
+        const look = Player.look.bind(Player);
+        Player.look = (dx, dy) => {
+            const k = this.scope.sensitivity(this.current);
+            look(dx * k, dy * k);
+        };
         for (const id of Weapons.order) {
             const w = new Weapon(id, {
                 worldParent: scene,
@@ -35,13 +44,25 @@ const Arsenal = {
 
         const playing = () => typeof Game !== 'undefined' && Game.state === 'playing';
         addEventListener('mousedown', e => {
-            if (playing() && e.button === 0) {
+            if (!playing()) {
+                return;
+            }
+            if (e.button === 0) {
                 this.current.setTrigger(true);
+            } else if (e.button === 2) {
+                this.current.setAlt(true);
             }
         });
         addEventListener('mouseup', e => {
             if (e.button === 0) {
                 this.current.setTrigger(false);
+            } else if (e.button === 2) {
+                this.current.setAlt(false);
+            }
+        });
+        addEventListener('contextmenu', e => {
+            if (playing()) {
+                e.preventDefault();
             }
         });
         addEventListener('wheel', e => {
@@ -62,6 +83,9 @@ const Arsenal = {
             if (e.code === 'KeyR') {
                 this.current.reload();
             }
+            if (e.code === 'KeyF') {
+                this.current.inspect();
+            }
         });
         document.addEventListener('mousemove', e => {
             if (playing()) {
@@ -71,6 +95,9 @@ const Arsenal = {
         document.addEventListener('pointerlockchange', () => {
             if (!document.pointerLockElement) {
                 this.current.setTrigger(false);
+                this.current.setAlt(false);
+                this.current.zoom = 0;
+                this.scope.update(this.current, camera, CONFIG.fov);
             }
         });
     },
@@ -82,11 +109,24 @@ const Arsenal = {
         if (this.current) {
             camera.remove(this.current.root);
             this.current.setTrigger(false);
+            this.current.setAlt(false);
             this.current.clearEffects();
         }
         this.current = this.weapons[id];
         camera.add(this.current.root);
         this.current.equip();
+        this.updateHud();
+    },
+
+    // Entering a new room: drop anything still in flight (spores, projectiles, a thrown pistol)
+    // and redraw the current gun, so nothing from the old room carries over.
+    reset() {
+        const w = this.current;
+        w.setTrigger(false);
+        w.setAlt(false);
+        w.clearEffects();
+        w.equip();
+        this.scope.update(w, camera, CONFIG.fov);
         this.updateHud();
     },
 
@@ -99,6 +139,11 @@ const Arsenal = {
             sprinting: !!(k.ShiftLeft || k.ShiftRight) && moving && speed > CONFIG.walk + 0.5,
             grounded: Player.onGround
         });
+        const z = this.scope.update(this.current, camera, CONFIG.fov);
+        const cross = document.getElementById('cross');
+        if (cross) {
+            cross.hidden = z > 0.6;
+        }
         this.updateHud();
     },
 
@@ -155,10 +200,12 @@ const Arsenal = {
         if (!this.hud || !w) {
             return;
         }
-        this.hud.name.textContent = w.name;
+        this.hud.name.textContent = w.name + (w.def.altName ? '  ·  RMB ' + w.def.altName : '');
         this.hud.ammo.textContent = w.ammo;
         this.hud.mag.textContent = '/ ' + w.stats.mag;
-        this.hud.bar.style.width = (w.reloadProgress * 100) + '%';
+        // the bar shows reload progress, or the shotgun's charge while charging
+        const charge = w.state === 'charge' ? w.data.charge : 0;
+        this.hud.bar.style.width = (Math.max(w.reloadProgress, charge) * 100) + '%';
         this.hud.bar.style.background = '#' + new THREE.Color(w.def.color).getHexString();
     }
 };

@@ -810,7 +810,17 @@ class Weapon {
         this.cooldown = 0;
         this.fireT = 99;
         this.prevFireT = 99;
-        this.setState('draw');
+        this.altHeld = false;
+        this.lastMode = 'primary';
+        // Set by weapon defs: zoom 0..1 (scope; the host narrows the camera FOV and shows an overlay),
+        // steady 0..1 (damps sway and bob), spreadScale (multiplies spread).
+        this.zoom = 0;
+        this.steady = 0;
+        this.spreadScale = 1;
+        this.smooth = 0;
+        this.rigVel = new THREE.Vector3();
+        this._prevRig = new THREE.Vector3();
+        this.setState('draw', false);
 
         this.moveBlend = 0;
         this.sprintBlend = 0;
@@ -822,6 +832,9 @@ class Weapon {
         this.recoilX = new Spring(200, 17);
         this.recoilR = new Spring(160, 14);
 
+        for (const o of this.b.parts) {
+            o.userData.prev = { p: o.position.clone(), q: o.quaternion.clone(), s: o.scale.clone() };
+        }
         if (def.init) {
             def.init(this);
         }
@@ -834,7 +847,38 @@ class Weapon {
         }
         this.trigger = down;
     }
+    // Alternate fire (right mouse). What it does is up to the weapon def (altPress / altRelease / altTick).
+    setAlt(down) {
+        if (down && !this.altHeld) {
+            this.altHeld = true;
+            if (this.state === 'inspect') {
+                this.setState('ready');
+            }
+            if (this.def.altPress) {
+                this.def.altPress(this);
+            }
+        } else if (!down && this.altHeld) {
+            this.altHeld = false;
+            if (this.def.altRelease) {
+                this.def.altRelease(this);
+            }
+        }
+    }
+    // Play the weapon's inspect animation (any other action cancels it).
+    inspect() {
+        if (this.state === 'ready' && this.def.inspect && this.cooldown <= 0) {
+            this.setState('inspect');
+            return true;
+        }
+        return false;
+    }
+    get inspectT() {
+        return this.state === 'inspect' ? this.actT : -1;
+    }
     reload() {
+        if (this.state === 'inspect') {
+            this.setState('ready');
+        }
         if (this.state === 'ready' && this.ammo < this.stats.mag) {
             this.reloadFrom = this.ammo;
             this.setState('reload');
@@ -845,7 +889,14 @@ class Weapon {
     equip() {
         this.trigger = false;
         this.buffer = 0;
-        this.setState('draw');
+        this.altHeld = false;
+        this.zoom = 0;
+        this.steady = 0;
+        this.spreadScale = 1;
+        if (this.def.cancel) {
+            this.def.cancel(this);
+        }
+        this.setState('draw', false);
     }
     // Feed raw mouse movement (pixels) for weapon sway.
     look(dx, dy) {
@@ -860,10 +911,12 @@ class Weapon {
     }
 
     // ---- helpers for weapon defs ------------------------------------------------
-    setState(s) {
+    // Changing state blends the pose over ~0.2s, so an interrupted animation never snaps.
+    setState(s, blend = true) {
         this.state = s;
         this.actT = 0;
         this.prevActT = -1e-4;
+        this.smooth = blend ? 1 : 0;
     }
     // True on the frame the current action's timeline passes `t` seconds.
     atAct(t) {
@@ -902,36 +955,44 @@ class Weapon {
     }
 
     // ---- firing --------------------------------------------------------------------
-    fire() {
+    /**
+     * Fire one shot. Alt modes pass overrides:
+     * { mode, ammo, cooldown, pellets, spread, damage, kickScale, projectile, flashScale }
+     */
+    fire(o = {}) {
         const side = this.def.side ? this.def.side(this) : 0;
         this.lastSide = side;
-        this.ammo--;
+        this.lastMode = o.mode || 'primary';
+        this.lastFire = o;
+        this.ammo = Math.max(0, this.ammo - (o.ammo || 1));
         this.shots++;
-        this.cooldown = 1 / this.stats.rate;
+        this.cooldown = o.cooldown !== undefined ? o.cooldown : 1 / this.stats.rate;
         this.buffer = 0;
         this.fireT = 0;
         this.prevFireT = -1e-4;
 
         const k = this.stats.kick;
-        this.recoilZ.kick(k.back * 22);
-        this.recoilX.kick(k.up * 22);
-        this.recoilR.kick((Math.random() * 2 - 1) * k.roll * 22);
+        const ks = (o.kickScale || 1) * 22;
+        this.recoilZ.kick(k.back * ks);
+        this.recoilX.kick(k.up * ks);
+        this.recoilR.kick((Math.random() * 2 - 1) * k.roll * ks);
 
         const fl = this.parts.flashes ? this.parts.flashes[side] || this.parts.flashes[0] : null;
         if (fl) {
             fl.age = 0;
+            fl.scale = o.flashScale || 1;
         }
         if (this.def.onFire) {
-            this.def.onFire(this, side);
+            this.def.onFire(this, side, o);
         }
-        const shot = this.makeShot(side);
+        const shot = this.makeShot(side, o);
         if (this.trace) {
             shot.hits = shot.dirs.map(d => this.trace(shot.origin, d, shot.range));
         }
         if (this.onShot) {
             this.onShot(shot);
         }
-        const cfg = this.def.projectile;
+        const cfg = o.projectile || this.def.projectile;
         if (cfg) {
             shot.dirs.forEach((d, i) => {
                 const hit = shot.hits && shot.hits[i];
@@ -943,30 +1004,47 @@ class Weapon {
 
     // Drop every particle and projectile in flight (e.g. when switching weapons).
     clearEffects() {
+        if (this.def.cancel) {
+            this.def.cancel(this);
+        }
         this.projectiles.clear();
         this.fx.clear();
     }
 
+    // Report extra hits (e.g. a thrown weapon) to the host the same way as a shot.
+    reportHits(hits, extra = {}) {
+        if (this.onShot) {
+            this.onShot(Object.assign({ weapon: this.id, damage: this.stats.damage, dirs: [], hits }, extra));
+        }
+    }
+
     // Hitscan info: rays start at the eye (the camera this weapon is attached to) so shots
     // land on the crosshair; `muzzle` is where tracers/effects should start.
-    makeShot(side) {
+    makeShot(side, o = {}) {
         const eye = this.root.parent || this.root;
         eye.updateWorldMatrix(true, false);
         const origin = new THREE.Vector3().setFromMatrixPosition(eye.matrixWorld);
         const aim = new THREE.Vector3(0, 0, -1).applyQuaternion(eye.getWorldQuaternion(new THREE.Quaternion()));
         const dirs = [];
-        for (let i = 0; i < this.stats.pellets; i++) {
-            dirs.push(this.stats.spread ? WeaponKit.cone(aim, this.stats.spread) : aim.clone());
+        const pellets = o.pellets || this.stats.pellets;
+        const spread = (o.spread !== undefined ? o.spread : this.stats.spread) * this.spreadScale;
+        for (let i = 0; i < pellets; i++) {
+            dirs.push(spread ? WeaponKit.cone(aim, spread) : aim.clone());
         }
         this.root.updateWorldMatrix(true, true);
+        // Scoped in, the gun is hidden: start projectiles just below the crosshair instead of the muzzle.
+        const muzzle = this.zoom > 0.5
+            ? origin.clone().addScaledVector(aim, 1.2).addScaledVector(new THREE.Vector3(0, -1, 0).applyQuaternion(eye.getWorldQuaternion(new THREE.Quaternion())), 0.06)
+            : this.worldPos(this.muzzle(side));
         return {
             weapon: this.id,
             origin,
             aim,
             dirs,
-            damage: this.stats.damage,
+            damage: o.damage || this.stats.damage,
+            mode: this.lastMode,
             range: this.stats.range,
-            muzzle: this.worldPos(this.muzzle(side)),
+            muzzle,
             side
         };
     }
@@ -993,6 +1071,12 @@ class Weapon {
             this.setState('ready');
         }
         const wants = (this.trigger && st.auto) || this.buffer > 0;
+        if (this.state === 'inspect' && (wants || this.actT >= this.def.inspect.time)) {
+            this.setState('ready');
+        }
+        if (this.def.altTick) {
+            this.def.altTick(this, dt, move);
+        }
         if (wants && this.state === 'ready' && this.cooldown <= 0 && !move.sprinting) {
             if (this.ammo > 0) {
                 this.fire();
@@ -1003,6 +1087,8 @@ class Weapon {
         }
 
         this.pose(dt, move);
+        // a fully scoped-in gun is hidden so the scope overlay is clean
+        this.root.visible = this.zoom < 0.97;
         this.root.updateWorldMatrix(true, true);
         if (this.def.effects) {
             this.def.effects(this, dt);
@@ -1039,17 +1125,20 @@ class Weapon {
         }
 
         const rig = this.rig;
-        const bob = 0.011 * this.moveBlend * (1 + this.sprintBlend * 0.8);
+        const calm = 1 - this.steady * 0.85;
+        const bob = 0.011 * this.moveBlend * (1 + this.sprintBlend * 0.8) * calm;
         const t = this.time;
+        const sx = this.swayX.x * calm;
+        const sy = this.swayY.x * calm;
         rig.position.set(
-            Math.sin(this.bobPhase) * bob + this.swayX.x * 0.05,
-            -Math.abs(Math.cos(this.bobPhase)) * bob + Math.sin(t * 1.6) * 0.0018 + this.swayY.x * 0.04 + this.airBlend * 0.015,
+            Math.sin(this.bobPhase) * bob + sx * 0.05,
+            -Math.abs(Math.cos(this.bobPhase)) * bob + Math.sin(t * 1.6) * 0.0018 * calm + sy * 0.04 + this.airBlend * 0.015,
             this.recoilZ.x
         );
         rig.rotation.set(
-            this.recoilX.x + this.swayY.x * 0.5 + Math.sin(t * 1.3) * 0.004 - this.sprintBlend * 0.32,
-            this.swayX.x * 0.6 + this.sprintBlend * (this.def.sprintYaw === undefined ? 0.6 : this.def.sprintYaw),
-            this.recoilR.x + this.swayX.x * 0.5 + Math.sin(this.bobPhase) * 0.012 * this.moveBlend
+            this.recoilX.x + sy * 0.5 + Math.sin(t * 1.3) * 0.004 * calm - this.sprintBlend * 0.32,
+            sx * 0.6 + this.sprintBlend * (this.def.sprintYaw === undefined ? 0.6 : this.def.sprintYaw),
+            this.recoilR.x + sx * 0.5 + Math.sin(this.bobPhase) * 0.012 * this.moveBlend * calm
         );
         rig.position.y += this.recoilX.x * 0.08 - this.sprintBlend * 0.05;
         rig.position.x -= this.sprintBlend * 0.04;
@@ -1063,10 +1152,10 @@ class Weapon {
 
         for (const f of this.parts.flashes || []) {
             f.age += dt;
-            const k = Math.max(0, 1 - f.age / 0.07);
+            const k = Math.max(0, 1 - f.age / (0.07 * (f.scale || 1)));
             f.core.visible = f.spike.visible = k > 0;
             if (k > 0) {
-                const s = f.size * (0.7 + Math.random() * 0.6) * (0.5 + k * 0.5);
+                const s = f.size * (f.scale || 1) * (0.7 + Math.random() * 0.6) * (0.5 + k * 0.5);
                 f.core.scale.setScalar(s);
                 f.core.rotation.z = Math.random() * 6;
                 f.spike.scale.set(s * 0.45, s * 0.45, s * 2.6);
@@ -1078,9 +1167,43 @@ class Weapon {
         if (this.def.pose) {
             this.def.pose(this, dt);
         }
+
+        // rig velocity (m/s, rig space) lets dangling parts swing believably
+        if (dt > 0) {
+            this.rigVel.copy(rig.position).sub(this._prevRig).multiplyScalar(1 / dt);
+        }
+        this._prevRig.copy(rig.position);
+
+        // interruption blending: ease from last frame's pose into the new one
+        if (this.smooth > 0) {
+            this.smooth = Math.max(0, this.smooth - dt / 0.22);
+            const f = this.smooth * 0.9;
+            for (const o of this.b.parts) {
+                const pv = o.userData.prev;
+                o.position.lerp(pv.p, f);
+                o.quaternion.slerp(pv.q, f);
+                o.scale.lerp(pv.s, f);
+            }
+        }
+        for (const o of this.b.parts) {
+            const pv = o.userData.prev;
+            pv.p.copy(o.position);
+            pv.q.copy(o.quaternion);
+            pv.s.copy(o.scale);
+        }
+    }
+
+    // A swinging charm: spring driven by the rig's motion. Returns the swing angle.
+    dangle(spring, dt, gain = 1) {
+        spring.v += (-this.rigVel.x * 6 - this.swayX.v * 0.8 + this.recoilX.v * 0.3) * gain * dt * 8;
+        spring.update(dt);
+        return spring.x;
     }
 
     dispose() {
+        if (this.def.dispose) {
+            this.def.dispose(this);
+        }
         if (this.root.parent) {
             this.root.parent.remove(this.root);
         }
@@ -1136,6 +1259,26 @@ class WeaponView {
         weapon.fx.layer = 0;
         weapon.root.traverse(o => o.layers.set(0));
     }
+    // Camera-attached key and rim lights that only light the guns (layer 1), so they read well
+    // in any room. The camera must be in the scene.
+    addLights() {
+        const c = this.camera;
+        const mk = (color, intensity, pos, target) => {
+            const l = new THREE.DirectionalLight(color, intensity);
+            l.position.fromArray(pos);
+            l.target.position.fromArray(target);
+            l.layers.set(this.layer);
+            c.add(l);
+            c.add(l.target);
+            return l;
+        };
+        this.lights = [
+            mk(0xfff1dc, 0.16, [-1.2, 1.6, 0.6], [0.2, -0.2, -0.6]),   // warm key from upper left
+            mk(0xbfe4ff, 0.42, [1.6, 0.9, -1.8], [0.2, -0.2, -0.5]),  // cool rim from behind right
+            mk(0xffe0b0, 0.08, [0, -1, -0.2], [0.1, 0, -0.5])          // soft bounce from below
+        ];
+        return this.lights;
+    }
     shareLights(scene) {
         scene.traverse(o => {
             if (o.isLight) {
@@ -1174,6 +1317,71 @@ class WeaponView {
         renderer.render(scene, this.cam);
         scene.background = bg;
         renderer.autoClear = auto;
+    }
+}
+
+// Full-screen scope view for weapons with def.scope (the sniper). Call update(weapon, camera, baseFov)
+// every frame: it narrows the camera FOV with weapon.zoom, fades the overlay in, and kicks it on recoil.
+class ScopeOverlay {
+    constructor(color = '#c77dff') {
+        const el = document.createElement('div');
+        el.style.cssText = 'position:fixed;inset:0;pointer-events:none;opacity:0;z-index:5;' +
+            'background:radial-gradient(circle at 50% 50%, rgba(90,30,120,0.06) 0, rgba(90,30,120,0.1) 31vmin, rgba(12,4,18,0.92) 33.5vmin, #050208 36vmin);';
+        const ticks = [];
+        for (let i = 1; i <= 4; i++) {
+            ticks.push(`<line x1="${i * 9}" y1="-2" x2="${i * 9}" y2="2"/><line x1="${-i * 9}" y1="-2" x2="${-i * 9}" y2="2"/><line x1="-2" y1="${i * 9}" x2="2" y2="${i * 9}"/>`);
+        }
+        // gill-like ridges round the rim of the lens, a nod to the cap the scope sits on
+        const gills = [];
+        for (let i = 0; i < 48; i++) {
+            const a = (i / 48) * Math.PI * 2;
+            const r0 = 92;
+            const r1 = i % 2 ? 97 : 99;
+            gills.push(`<line x1="${(Math.cos(a) * r0).toFixed(1)}" y1="${(Math.sin(a) * r0).toFixed(1)}" x2="${(Math.cos(a) * r1).toFixed(1)}" y2="${(Math.sin(a) * r1).toFixed(1)}"/>`);
+        }
+        el.innerHTML = `<svg viewBox="-100 -100 200 200" style="position:absolute;left:50%;top:50%;width:68vmin;height:68vmin;transform:translate(-50%,-50%);overflow:visible">
+            <g stroke="${color}" stroke-width="0.6" fill="none" opacity="0.9">
+              <circle r="99" stroke-width="1.4" opacity="0.6"/>
+              <g opacity="0.35">${gills.join('')}</g>
+              <line x1="-90" y1="0" x2="-6" y2="0"/><line x1="6" y1="0" x2="90" y2="0"/>
+              <line x1="0" y1="6" x2="0" y2="90"/><line x1="0" y1="-90" x2="0" y2="-24"/>
+              ${ticks.join('')}
+              <circle r="14" opacity="0.5" stroke-dasharray="2 3"/>
+            </g>
+            <circle r="1.4" fill="${color}"/>
+          </svg>`;
+        // muzzle flash bloom seen through the lens when a scoped shot goes off
+        const bloom = document.createElement('div');
+        bloom.style.cssText = `position:absolute;inset:0;opacity:0;background:radial-gradient(circle at 50% 56%, ${color}cc 0, ${color}55 12vmin, transparent 30vmin);mix-blend-mode:screen`;
+        el.appendChild(bloom);
+        document.body.appendChild(el);
+        this.el = el;
+        this.svg = el.firstElementChild;
+        this.bloom = bloom;
+    }
+    update(w, camera, baseFov) {
+        const K = WeaponKit;
+        const scope = w && w.def.scope;
+        const z = scope ? K.ease.inOutSine(w.zoom) : 0;
+        const fov = scope ? K.lerp(baseFov, scope.fov, z) : baseFov;
+        if (Math.abs(camera.fov - fov) > 0.01) {
+            camera.fov = fov;
+            camera.updateProjectionMatrix();
+        }
+        const show = K.seg(z, 0.75, 1);
+        this.el.style.opacity = show.toFixed(3);
+        this.bloom.style.opacity = show > 0 ? Math.max(0, 1 - w.fireT / 0.16).toFixed(3) : '0';
+        if (show > 0) {
+            const kick = w.recoilX.x * 260;
+            const sway = w.swayX.x * 120;
+            this.svg.style.transform = `translate(calc(-50% + ${sway.toFixed(1)}px), calc(-50% - ${kick.toFixed(1)}px))`;
+        }
+        return z;
+    }
+    // Mouse sensitivity multiplier while scoped.
+    sensitivity(w) {
+        const scope = w && w.def.scope;
+        return scope ? 1 - (1 - (scope.sensitivity || 0.35)) * w.zoom : 1;
     }
 }
 

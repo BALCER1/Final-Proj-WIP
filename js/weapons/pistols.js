@@ -9,6 +9,11 @@
 //         vines spiral out of the sac, up the grip and along the whole slide to the muzzle. Side
 //         shoots curl off and pop little glowing mushrooms, new sacs swell, a pulse of light runs
 //         through the vines, then they wither back and both slides are racked.
+// Alt (right mouse): BOOMERANG THROW. Both guns are rolled flat and wound back, then flung out
+//         spinning: the left one loops out to the left, the right one to the right, trailing teal
+//         spores and damaging what they pass through, then they curve back and are caught.
+// Inspect: both guns come up side-on, get a double revolver twirl, flip to show their other sides,
+//         and each slide is press-checked so its spore port flares.
 
 (() => {
     // The grip is angled back like a Deagle's: this maps a point in grip space into gun space.
@@ -22,6 +27,7 @@
 
     Weapons.register('pistols', {
         name: 'Chanterelle Eagles',
+        altName: 'Throw',
         offset: [0, -0.145, -0.45],
         sprintYaw: 0.2,
         stats: {
@@ -36,6 +42,9 @@
             trail: { spacing: 0.32, life: 0.26, size: 0.009, drift: 0.1, sparks: 0.1, length: 16 },
             impact: { count: 6, size: 0.016 }
         },
+        inspect: { time: 3.2 },
+        // boomerang throw timeline (seconds) and damage per hit
+        throwT: { windup: 0.22, flight: 1.35, catch: 0.32, damage: 30, reach: 6 },
 
         build(b) {
             const C = {
@@ -51,6 +60,7 @@
                 bark: b.mat('bark', { color: C.bark, roughness: 0.95, flatShading: true }),
                 dark: b.mat('dark', { color: C.dark, roughness: 1, side: THREE.DoubleSide }),
                 vine: b.glow('vine', C.glow, 0.5, { color: 0xe9fff7, roughness: 0.6 }),
+                inlay: b.glow('inlay', C.glow, 0.7, { color: 0x2a6b58 }),
                 bud: b.glow('bud', C.glow, 1.2),
                 node: b.glow('node', C.glow, 1.6)
             };
@@ -180,6 +190,28 @@
                     }
                 }
 
+                // ---- extra detail ----
+                // glowing vine inlay along both sides of the frame
+                for (const sx of [-1, 1]) {
+                    b.box(0.0012, 0.0022, 0.15, m.inlay, g, [sx * 0.0152, 0.004, -0.065]);
+                    b.box(0.0012, 0.0022, 0.03, m.inlay, g, [sx * 0.0152, 0.008, -0.142], [0.25, 0, 0]);
+                }
+                // compensator slots on top of the slide, just behind the frill
+                for (let i = 0; i < 3; i++) {
+                    b.box(0.0045, 0.0015, 0.003, m.dark, slide, [0, 0.0512, -0.13 - i * 0.008]);
+                }
+                // grip medallions: a little chanterelle cap ringed in teal on each panel
+                for (const sx of [-1, 1]) {
+                    const med = b.group(grip, [sx * 0.0175, -0.05, 0], [0, 0, -sx * Math.PI / 2]);
+                    b.cap(0.0075, 0.004, m.deep, null, med, null, null, { seg: 14 });
+                    b.ring(0.008, 0.0012, m.inlay, med, [0, 0.0005, 0], [Math.PI / 2, 0, 0], { ts: 18, rs: 4 });
+                }
+                // lanyard loop and a short mycelium tassel with a spore bead
+                b.ring(0.0045, 0.0013, m.stem, grip, [0, -0.106, 0.024], [0, Math.PI / 2, 0], { ts: 10, rs: 4 });
+                gun.tassel = b.part(b.group(grip, [0, -0.11, 0.026]));
+                b.tube([[0, 0, 0], [0.001, -0.012, 0.001], [0, -0.024, 0]], 0.0011, 0.0011, m.vine, gun.tassel, { seg: 8, radial: 4 });
+                b.sphere(0.0035, m.node, gun.tassel, [0, -0.026, 0], null, { ws: 8, hs: 6 });
+
                 gun.muzzle = b.group(g, [0, 0.033, -0.175]);
                 gun.flash = b.flash(gun.muzzle, null, C.glow, 0.05, 2);
                 b.part(g);
@@ -195,6 +227,191 @@
             w.data.gunFireT = [9, 9];
             w.data.sacPos = [new THREE.Vector3(), new THREE.Vector3()];
             w.data.tip = new THREE.Vector3();
+            w.data.tassel = [new Spring(50, 2), new Spring(50, 2)];
+            w.data.thrown = null;
+        },
+
+        // ---- alt fire: boomerang throw ----
+        altPress(w) {
+            if (w.state === 'ready' && w.cooldown <= 0) {
+                w.data.thrown = null;
+                w.setState('throw');
+            }
+        },
+        altTick(w, dt) {
+            if (w.state !== 'throw') {
+                if (w.data.thrown) {
+                    this.cancel(w);
+                }
+                return;
+            }
+            const T = this.throwT;
+            if (!w.data.thrown && w.actT >= T.windup) {
+                this.launch(w);
+            }
+            if (w.data.thrown) {
+                this.fly(w, dt);
+            }
+            if (w.actT >= T.windup + T.flight + T.catch) {
+                w.data.thrown = null;
+                w.setState('ready');
+            }
+        },
+        dispose(w) {
+            w.parts.guns.forEach(gun => {
+                if (gun.clone) {
+                    gun.clone.parent.remove(gun.clone);
+                    gun.clone.userData.disc.geometry.dispose();
+                    gun.clone.userData.disc.material.dispose();
+                }
+            });
+        },
+        cancel(w) {
+            const th = w.data.thrown;
+            if (th) {
+                th.guns.forEach(g => {
+                    g.clone.visible = false;
+                });
+            }
+            w.data.thrown = null;
+        },
+
+        // A world-space copy of a pistol to fly around (shares geometry and materials with the real one).
+        cloneOf(w, gun) {
+            if (!gun.clone) {
+                const c = gun.g.clone(true);
+                const lights = [];
+                c.traverse(o => {
+                    o.layers.set(0);
+                    if (o.isLight) {
+                        lights.push(o);
+                    }
+                });
+                lights.forEach(l => l.parent.remove(l));
+                // faint spinning blur disc so the flying gun reads as a boomerang
+                const disc = new THREE.Mesh(
+                    new THREE.RingGeometry(0.03, 0.16, 40),
+                    new THREE.MeshBasicMaterial({ color: this.color, transparent: true, opacity: 0.2, blending: THREE.AdditiveBlending, side: THREE.DoubleSide, depthWrite: false })
+                );
+                disc.rotation.y = Math.PI / 2;
+                c.add(disc);
+                c.userData.disc = disc;
+                c.rotation.order = 'YXZ';
+                c.visible = false;
+                w.fx.worldParent.add(c);
+                gun.clone = c;
+            }
+            return gun.clone;
+        },
+
+        launch(w) {
+            const K = WeaponKit;
+            const T = this.throwT;
+            const P = w.parts;
+            const eye = w.root.parent || w.root;
+            const q = eye.getWorldQuaternion(new THREE.Quaternion());
+            const origin = eye.getWorldPosition(new THREE.Vector3());
+            const f = new THREE.Vector3(0, 0, -1).applyQuaternion(q);
+            const right = new THREE.Vector3(1, 0, 0).applyQuaternion(q);
+            const up = new THREE.Vector3(0, 1, 0);
+            let D = T.reach;
+            if (w.trace) {
+                const hit = w.trace(origin, f, T.reach);
+                if (hit) {
+                    D = Math.max(1.5, hit.point.distanceTo(origin) - 0.6);
+                }
+            }
+            // the gun looks bigger in the narrower gun camera; scale the flying copy to match
+            const view = w.view;
+            const ratio = view ? Math.tan(K.clamp(view.camera.fov, 1, 170) * Math.PI / 360) / Math.tan(view.cam.fov * Math.PI / 360) : 1;
+            const th = { f, right, up, D, ratio, yaw: Math.atan2(-f.x, -f.z), guns: [] };
+            P.guns.forEach((gun, s) => {
+                if (!w.fx.worldParent) {
+                    return;
+                }
+                const sign = s ? 1 : -1;
+                const start = w.worldPos(gun.g);
+                let W = Math.min(1.8, D * 0.32);
+                if (w.trace) {
+                    const apex = start.clone().addScaledVector(f, D * 0.75).addScaledVector(right, sign * W);
+                    const dir = apex.clone().sub(start);
+                    const len = dir.length();
+                    const hit = w.trace(start, dir.normalize(), len);
+                    if (hit) {
+                        W *= K.clamp((hit.point.distanceTo(start) - 0.4) / len, 0.15, 1);
+                    }
+                }
+                const clone = this.cloneOf(w, gun);
+                clone.visible = true;
+                clone.position.copy(start);
+                th.guns.push({ s, sign, gun, clone, start, W, prev: start.clone(), spin: 0, hitCd: 0, caught: false });
+            });
+            w.data.thrown = th;
+        },
+
+        fly(w, dt) {
+            const K = WeaponKit;
+            const T = this.throwT;
+            const th = w.data.thrown;
+            const u = K.clamp((w.actT - T.windup) / T.flight);
+            const P = w.parts;
+            const pos = new THREE.Vector3();
+            const hand = new THREE.Vector3();
+            th.guns.forEach(g => {
+                if (g.caught) {
+                    return;
+                }
+                // a loop: out wide to the side, back on a tighter line, rising slightly at the far end
+                const forward = th.D * Math.pow(Math.sin(Math.PI * u), 1.5); // lingers near you at the start and end
+                const lateral = g.sign * g.W * (Math.pow(Math.sin(Math.PI * u), 2) + 0.55 * Math.sin(2 * Math.PI * u));
+                const rise = 0.35 * Math.sin(Math.PI * u);
+                pos.copy(g.start).addScaledVector(th.f, forward).addScaledVector(th.right, lateral).addScaledVector(th.up, rise);
+                // come home to where the hand is now, not where it was
+                w.worldPos(P.model, g.gun.g.userData.rest.p.toArray(), hand);
+                pos.addScaledVector(hand.sub(g.start), K.ease.inOutSine(u));
+                g.clone.position.copy(pos);
+
+                g.spin += dt * (16 + 8 * Math.sin(Math.PI * u)) * -g.sign;
+                g.clone.rotation.set(0.28 * Math.sin(Math.PI * u), th.yaw + g.spin, g.sign * Math.PI / 2);
+                g.clone.scale.setScalar(K.lerp(th.ratio, th.ratio * 1.7, Math.sin(Math.PI * u)));
+                g.clone.userData.disc.material.opacity = 0.18 + 0.15 * Math.sin(Math.PI * u) + Math.random() * 0.06;
+
+                // spore trail from the tips of the spinning gun
+                const n = w.fx.rate('boom' + g.s, 110, dt);
+                const sc = g.clone.scale.x;
+                for (let i = 0; i < n; i++) {
+                    const a = th.yaw + g.spin + Math.random() * 0.5;
+                    const tipPos = pos.clone().add(new THREE.Vector3(-Math.sin(a), 0, -Math.cos(a)).multiplyScalar(0.13 * sc));
+                    w.fx.emit({ world: true, pos: tipPos, vel: K.sphereDir().multiplyScalar(0.2), life: K.rand(0.3, 0.55), size: K.rand(0.014, 0.024), sizeEnd: 0, color: Math.random() < 0.7 ? this.color : 0xffffff, drag: 2 });
+                }
+
+                // damage anything the gun sweeps through
+                g.hitCd -= dt;
+                const step = pos.clone().sub(g.prev);
+                const len = step.length();
+                if (w.trace && len > 0.001 && g.hitCd <= 0) {
+                    const hit = w.trace(g.prev, step.multiplyScalar(1 / len), len + 0.12);
+                    if (hit) {
+                        g.hitCd = 0.3;
+                        for (let i = 0; i < 12; i++) {
+                            w.fx.emit({ world: true, pos: hit.point, vel: K.sphereDir().multiplyScalar(1.4).add(hit.normal || new THREE.Vector3()), life: 0.35, size: 0.012, sizeEnd: 0, color: i % 3 ? this.color : 0xffffff, drag: 3, gravity: 3, stretch: 0.02 });
+                        }
+                        w.reportHits([hit], { mode: 'boomerang', damage: T.damage, side: g.s });
+                    }
+                }
+                g.prev.copy(pos);
+
+                if (u >= 1) {
+                    g.caught = true;
+                    g.clone.visible = false;
+                    w.data.kick[g.s].kick(-8);
+                    w.data.twist[g.s].kick(g.sign * 6);
+                    const p = w.localPos(g.gun.g);
+                    for (let i = 0; i < 14; i++) {
+                        w.fx.emit({ pos: p, vel: K.sphereDir().multiplyScalar(0.35), life: 0.35, size: 0.004, color: i % 2 ? this.color : 0xffffff, drag: 3 });
+                    }
+                }
+            });
         },
 
         // Right pistol (index 1) fires on even ammo counts, left (0) on odd, so they alternate.
@@ -251,6 +468,31 @@
                 g.position.z += kick.x * 0.006;
                 g.position.y += kick.x * 0.002;
                 g.rotation.z += twist.x * 0.02;
+                gun.tassel.rotation.z += w.dangle(w.data.tassel[s], dt, 1.6) * 0.8;
+                gun.tassel.rotation.x += Math.sin(w.time * 2 + s) * 0.08;
+
+                // ---- boomerang throw: wind-up, hidden while flying, catch ----
+                if (w.state === 'throw') {
+                    const T = this.throwT;
+                    const t = w.actT;
+                    const wind = K.e('inOutCubic', t, 0, T.windup);
+                    const flying = t >= T.windup && t < T.windup + T.flight;
+                    g.visible = !flying;
+                    if (t < T.windup) {
+                        g.position.z += wind * 0.07;
+                        g.position.x += sign * wind * 0.04;
+                        g.rotation.z += sign * wind * Math.PI / 2;
+                        g.rotation.y -= sign * wind * 0.6;
+                        g.rotation.x += wind * 0.15;
+                    } else if (!flying) {
+                        const ct = t - T.windup - T.flight;
+                        const c = 1 - K.e('outCubic', ct, 0, T.catch);
+                        g.rotation.z += sign * c * Math.PI / 2;
+                        g.rotation.y += -sign * c * 2.5;
+                        g.position.z += c * 0.06;
+                        g.position.y -= c * 0.02;
+                    }
+                }
 
                 // slide blowback, and it stays locked back once this gun is empty
                 let back = K.e('outQuad', ft, 0, 0.03) * (1 - K.e('inOutCubic', ft, 0.04, 0.1));
@@ -264,6 +506,23 @@
                 gun.core.emissiveIntensity = 0.3 + 1.1 * share / half + Math.sin(w.time * 3 + s) * 0.15;
                 gun.coreMesh.scale.multiplyScalar(0.35 + 0.65 * share / half);
                 gun.coreMesh.rotation.y += w.time * 0.8;
+
+                // ---- inspect: side-on, double twirl, flip, press-check ----
+                const it = w.inspectT;
+                if (it >= 0) {
+                    const d = s * 0.1;
+                    const env = K.e('inOutCubic', it, 0, 0.45) * (1 - K.e('inOutCubic', it, 2.65, 3.2));
+                    g.position.x -= sign * env * 0.06;
+                    g.position.y += env * 0.07;
+                    g.position.z += env * 0.03;
+                    const flip = K.e('inOutCubic', it, 1.3 + d, 1.95 + d);
+                    g.rotation.y += -sign * env * 1.0 * (1 - 2 * flip);
+                    g.rotation.x += K.e('inOutCubic', it, 0.45 + d, 1.15 + d) * Math.PI * 4;
+                    g.rotation.z += sign * env * 0.1;
+                    back = Math.max(back, K.hump(it, 2.05 + d, 2.45 + d) * 0.7);
+                    gun.port.emissiveIntensity += K.hump(it, 2.05 + d, 2.45 + d) * 2.5;
+                }
+
 
                 if (r < 0) {
                     gun.slide.position.z += back * 0.03;
