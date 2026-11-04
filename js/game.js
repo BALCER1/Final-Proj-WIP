@@ -1,6 +1,3 @@
-// Game state: intro -> main menu -> map -> room -> map -> ... -> boss -> run complete.
-// Only the room the player is standing in exists; it is built on entry and disposed on exit.
-
 const Game = {
     state: 'menu',
     room: null,
@@ -30,7 +27,6 @@ const Game = {
         on('mapBackBtn', () => this.closeBrowse());
 
         addEventListener('keydown', e => {
-            // With Esc keyboard-locked in fullscreen the browser no longer frees the mouse itself.
             if (e.code === 'Escape' && this.state === 'playing') {
                 document.exitPointerLock();
             }
@@ -102,7 +98,6 @@ const Game = {
         this.openMap();
     },
 
-    // The full zoom-out reveal only plays at the start of a run and after a boss.
     openMap() {
         this.setState('map');
         if (document.pointerLockElement) {
@@ -116,7 +111,6 @@ const Game = {
         });
     },
 
-    // M mid-room: look at the map without leaving the room.
     browseMap() {
         this.setState('mapview');
         document.exitPointerLock();
@@ -168,7 +162,6 @@ const Game = {
     },
 
     quit() {
-        // Browsers only let a page close itself if script opened it, so fall back to a goodbye screen.
         window.close();
         this.setState('quit');
     },

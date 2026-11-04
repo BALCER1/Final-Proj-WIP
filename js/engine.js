@@ -1,5 +1,3 @@
-// Core three.js setup, input, player movement and the RoomBuilder that every room uses.
-
 const scene = new THREE.Scene();
 scene.background = new THREE.Color(0x000000);
 const camera = new THREE.PerspectiveCamera(CONFIG.fov, innerWidth / innerHeight, 0.1, 400);
@@ -162,8 +160,6 @@ const Player = {
     }
 };
 
-// Everything a room creates goes through a RoomBuilder so it can all be
-// thrown away (GPU memory included) the moment the player leaves the room.
 class RoomBuilder {
     constructor() {
         this.group = new THREE.Group();
@@ -205,7 +201,6 @@ class RoomBuilder {
         this.solid(x, y, z, w, h, d);
         return this.deco(x, y, z, w, h, d, color);
     }
-    // Unlit black box, used for the "darkness" behind doors.
     dark(x, y, z, w, h, d, isSolid = true) {
         const mesh = new THREE.Mesh(
             new THREE.BoxGeometry(w, h, d),

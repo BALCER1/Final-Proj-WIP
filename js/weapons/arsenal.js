@@ -1,33 +1,19 @@
-// Arsenal: glue between the mushroom weapons and Proj's engine (scene, camera, renderer, Player, Game).
-// Owns the four guns, switches between them (1-4 / mouse wheel), feeds them input and player movement,
-// does hitscan against the current room, and draws them with WeaponView.
-// Controls: LMB fire, RMB alt fire (charge / burst / scope / throw), R reload, F inspect.
-//
-// Hook-up (see WEAPONS.md):
-//   Game.init()  -> Arsenal.init();
-//   Game.loop()  -> if (this.state === 'playing') Arsenal.update(dt);
-//                   replace renderer.render(scene, camera) with Arsenal.render();
-
 const Arsenal = {
     weapons: {},
     current: null,
     view: null,
     ray: new THREE.Raycaster(),
     hud: null,
-    // The player's hands, shared by every weapon (recolour / equip them here, see hands.js).
     hands: null,
-    // Called for every pellet that hits something: (hit, shot) where hit is { point, normal, object,
-    // distance }. Point this at your enemy damage code later.
     onHit: null,
 
     init() {
-        scene.add(camera); // the guns are children of the camera, so the camera must be in the scene
+        scene.add(camera);
         this.view = new WeaponView(camera, { fov: 55 });
         this.view.shareLights(scene);
         this.view.addLights();
         this.scope = new ScopeOverlay();
         this.hands = new Hands();
-        // slow the mouse down while scoped in
         const look = Player.look.bind(Player);
         Player.look = (dx, dy) => {
             const k = this.scope.sensitivity(this.current);
@@ -123,8 +109,6 @@ const Arsenal = {
         this.updateHud();
     },
 
-    // Entering a new room: drop anything still in flight (spores, projectiles, a thrown pistol)
-    // and redraw the current gun, so nothing from the old room carries over.
     reset() {
         const w = this.current;
         w.setTrigger(false);
@@ -157,7 +141,6 @@ const Arsenal = {
         this.view.render(renderer, scene);
     },
 
-    // Where a pellet lands in the current room. The weapon flies its projectile there and splashes it.
     trace(origin, dir, range) {
         const room = typeof Game !== 'undefined' && Game.room;
         if (!room) {
@@ -173,7 +156,6 @@ const Arsenal = {
         return { point: hit.point, normal, object: hit.object, distance: hit.distance };
     },
 
-    // Damage is instant (hitscan); shot.hits[i] is what pellet i hit, or null.
     shoot(shot) {
         if (!this.onHit || !shot.hits) {
             return;
@@ -208,7 +190,6 @@ const Arsenal = {
         this.hud.name.textContent = w.name + (w.def.altName ? '  ·  RMB ' + w.def.altName : '');
         this.hud.ammo.textContent = w.ammo;
         this.hud.mag.textContent = '/ ' + w.stats.mag;
-        // the bar shows reload progress, or the shotgun's charge while charging
         const charge = w.state === 'charge' ? w.data.charge : 0;
         this.hud.bar.style.width = (Math.max(w.reloadProgress, charge) * 100) + '%';
         this.hud.bar.style.background = '#' + new THREE.Color(w.def.color).getHexString();

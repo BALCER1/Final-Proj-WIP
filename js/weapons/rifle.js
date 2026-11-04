@@ -1,19 +1,3 @@
-// MOREL CARBINE - automatic rifle.
-// A honeycombed morel receiver, a long stalk barrel with gill collars, bracket fungi along the
-// handguard, a glass spore vial for a magazine and a flat mushroom-cap butt pad.
-// Fire:   quick kicks, the side gills flash, the vial's golden powder sloshes and drains.
-// Reload: gun rolls over, the cap hatch on top flips open, a spore pouch swings in, tips and
-//         POURS a stream of glowing powder in while the vial visibly fills, then hatch snaps shut
-//         and the mushroom-knob bolt is racked.
-// Alt (right mouse): 3-ROUND BURST. The fire selector flips, three tight, fast, extra-bright
-//         rounds go out, and the burst pips on the side go dark one by one.
-// Inspect: turns the gun to show the vial, taps it (powder swirls, bubbles rise), peeks under the
-//         hatch, then rolls the whole carbine a full turn around the barrel.
-// Hands:  right on the grip, left under the handguard. Reload: the left hand flips the hatch,
-//         catches the pouch and pours it, the right hand racks the bolt. Inspect: the left hand taps
-//         the vial and lifts the hatch, both loosen while the carbine rolls in them, the right
-//         checks the bolt.
-
 Weapons.register('rifle', {
     name: 'Morel Carbine',
     altName: 'Burst',
@@ -24,7 +8,6 @@ Weapons.register('rifle', {
         kick: { back: 0.028, up: 0.04, roll: 0.02 }
     },
     color: 0xffc44a,
-    // golden tracer spore with a glittering powder trail
     projectile: {
         speed: 80, size: 0.015, stretch: 5, color: 0xffc44a, core: 0xfff3c8, maxDist: 60,
         trail: { spacing: 0.3, life: 0.24, size: 0.009, drift: 0.12, sparks: 0.12, length: 20 },
@@ -37,7 +20,6 @@ Weapons.register('rifle', {
     },
     inspect: { time: 3.3 },
     hands: { left: 'handguard', right: 'grip' },
-    // where the left hand waits (rig space) while the carbine rolls during inspect
 
     build(b) {
         const C = {
@@ -64,7 +46,6 @@ Weapons.register('rifle', {
         };
         const model = b.group();
 
-        // Barrel with gill collars and a morel-tip muzzle
         b.tubeZ(0.0135, 0.017, 0.58, m.stem, model, [0, 0.012, -0.43], { wobble: 0.0015 });
         for (const z of [-0.47, -0.58, -0.66]) {
             b.ring(0.018, 0.005, m.gill, model, [0, 0.012, z]);
@@ -74,12 +55,10 @@ Weapons.register('rifle', {
         b.disc(0.011, m.dark, model, [0, 0.012, -0.76], [0, Math.PI, 0]);
         b.part(b.mini(model, [0, 0.026, -0.645], 0.02, m.cap, m.stem));
 
-        // Handguard + bracket fungi stacked on both sides
         b.tubeZ(0.027, 0.031, 0.22, m.stem, model, [0, 0.008, -0.27], { wobble: 0.002 });
         const brackets = [];
         for (const side of [-1, 1]) {
             [[-0.2, 0.028, 0.03, m.bracket], [-0.255, 0.012, 0.026, m.bracket2], [-0.31, 0.024, 0.022, m.bracket]].forEach(([z, y, r, mat], i) => {
-                // half-dome shelf fungus sticking out sideways (+x before the side flip)
                 const g = b.group(model, [side * 0.026, y, z], [0, side > 0 ? 0 : Math.PI, 0]);
                 b.mesh(new THREE.SphereGeometry(r, 16, 6, Math.PI / 2, Math.PI, 0, Math.PI / 2), mat, g, null, null, [1, 0.32, 1]);
                 b.ring(r * 0.98, 0.0025, m.gill, g, null, [Math.PI / 2, 0, -Math.PI / 2], { arc: Math.PI, ts: 14 });
@@ -87,15 +66,12 @@ Weapons.register('rifle', {
             });
         }
 
-        // Frame
         b.tubeZ(0.03, 0.033, 0.32, m.stem, model, [0, -0.002, -0.02], { wobble: 0.0015 });
 
-        // Morel receiver: elongated honeycombed cap lying along the gun
         const L = 0.26;
         const pts = [];
         for (let i = 0; i <= 18; i++) {
             const y = (i / 18) * L;
-            // closed at both ends so the hollow inside never shows
             pts.push([0.052 * Math.pow(Math.sin(Math.PI * y / L), 0.65) + 0.004 * (y / L), y]);
         }
         const morel = b.lathe(pts, m.morel, model, [0, 0.036, 0.11], [-Math.PI / 2, 0, 0], { seg: 34 });
@@ -105,7 +81,6 @@ Weapons.register('rifle', {
             return 0.006 * Math.pow(1 - Math.abs(n), 5) - 0.0025;
         });
 
-        // Hatch on top (a flat cap hinged at the back)
         const hz = -0.035;
         const hy = 0.087;
         b.disc(0.022, m.dark, model, [0, hy - 0.001, hz], [-Math.PI / 2, 0, 0]);
@@ -114,14 +89,12 @@ Weapons.register('rifle', {
         b.cap(0.03, 0.012, m.cap, m.gill, hatch, [0, 0.002, -0.028], null, { fins: 12, flat: 0.6 });
         b.sphere(0.005, m.stem, hatch, [0, 0.015, -0.028]);
 
-        // Side gills that flash when firing
         for (const side of [-1, 1]) {
             for (let i = 0; i < 6; i++) {
                 b.box(0.003, 0.02, 0.011, m.gills, model, [side * 0.031, 0.0, -0.11 + i * 0.024], [0, 0, side * 0.15]);
             }
         }
 
-        // Spore vial magazine (liquid level = ammo)
         const vial = b.part(b.group(model, [0, -0.07, -0.085], [0.22, 0, 0]));
         b.mesh(new THREE.CylinderGeometry(0.021, 0.021, 0.1, 18, 1, true), m.glass, vial);
         b.sphere(0.021, m.glass, vial, [0, -0.05, 0], null, { t0: Math.PI / 2, tl: Math.PI / 2 });
@@ -132,7 +105,6 @@ Weapons.register('rifle', {
         b.ring(0.022, 0.004, m.gill, vial, [0, 0.048, 0], [Math.PI / 2, 0, 0]);
         b.ring(0.022, 0.003, m.gill, vial, [0, -0.02, 0], [Math.PI / 2, 0, 0]);
 
-        // Vial cage: three mycelium bars + bubbles that drift up through the powder
         for (let i = 0; i < 3; i++) {
             const a = (i / 3) * Math.PI * 2 + 0.5;
             b.tube([[Math.cos(a) * 0.024, 0.046, Math.sin(a) * 0.024], [Math.cos(a) * 0.026, 0, Math.sin(a) * 0.026], [Math.cos(a) * 0.022, -0.05, Math.sin(a) * 0.022]], 0.0016, 0.0016, m.myc, vial, { seg: 8, radial: 4 });
@@ -143,7 +115,6 @@ Weapons.register('rifle', {
             bubbles.push(b.part(b.sphere(0.0022 + (i % 2) * 0.0012, m.bubble, vial, [Math.cos(a) * 0.009, -0.04, Math.sin(a) * 0.009], null, { ws: 6, hs: 4 })));
         }
 
-        // Fire selector (little cap lever on the left) and three burst pips
         const selector = b.part(b.group(model, [-0.033, -0.004, 0.045]));
         b.mesh(new THREE.CylinderGeometry(0.0025, 0.0025, 0.016, 6), m.stem, selector, [0, 0.008, 0]);
         b.cap(0.007, 0.006, m.cap, null, selector, [0, 0.016, 0], [0, 0, 0], { seg: 10 });
@@ -155,31 +126,26 @@ Weapons.register('rifle', {
             pips.push(mat);
         }
 
-        // Peep rear sight on a little stalk, compensator slits near the muzzle
         b.mesh(new THREE.CylinderGeometry(0.003, 0.004, 0.05, 6), m.stem, model, [0, 0.085, 0.07]);
         b.ring(0.0075, 0.0022, m.cap, model, [0, 0.112, 0.07], null, { ts: 14, rs: 5 });
         for (let i = 0; i < 3; i++) {
             b.box(0.008, 0.004, 0.0035, m.dark, model, [0, 0.027, -0.68 - i * 0.009]);
         }
 
-        // Sling: hangs from a loop under the handguard to the stock and sways as you move
         b.ring(0.006, 0.0018, m.stem, model, [0, -0.026, -0.3], [0, Math.PI / 2, 0], { ts: 12, rs: 4 });
         b.ring(0.006, 0.0018, m.stem, model, [0, -0.05, 0.27], [0, Math.PI / 2, 0], { ts: 12, rs: 4 });
         const sling = b.part(b.group(model, [0, -0.03, 0]));
         b.tube([[0, 0.004, -0.3], [0.004, -0.06, -0.16], [0.006, -0.1, 0.0], [0.004, -0.085, 0.16], [0, -0.02, 0.27]], 0.0035, 0.0035, m.strap, sling, { seg: 40, radial: 5 });
 
-        // Mushroom-knob bolt on the right side
         const bolt = b.part(b.group(model, [0.03, 0.012, 0.02]));
         b.mesh(new THREE.CylinderGeometry(0.005, 0.006, 0.03, 8), m.stem, bolt, [0.015, 0, 0], [0, 0, Math.PI / 2]);
         b.cap(0.014, 0.012, m.cap, m.gill, bolt, [0.028, 0, 0], [0, 0, -Math.PI / 2], { fins: 0, seg: 14 });
 
-        // Grip, trigger, stock with a mushroom-cap butt pad
         b.tube([[0, -0.02, 0.07], [0, -0.07, 0.09], [0, -0.13, 0.115]], 0.019, 0.017, m.wood, model, { wobble: 0.002, ends: true });
         b.ring(0.022, 0.0032, m.stem, model, [0, -0.03, 0.03], [0, Math.PI / 2, 0], { arc: Math.PI });
         b.box(0.004, 0.02, 0.007, m.gill, model, [0, -0.03, 0.035], [0.3, 0, 0]);
         b.tube([[0, 0.0, 0.13], [0, -0.008, 0.21], [0, -0.03, 0.3]], 0.028, 0.034, m.stem, model, { wobble: 0.002, ends: true });
         b.tube([[0, 0.028, 0.07], [0, 0.03, 0.2], [0, 0.0, 0.29]], 0.012, 0.016, m.wood, model, { wobble: 0.002, ends: true });
-        // knuckle + collars covering the joint where the frame, morel and stock meet
         b.sphere(0.036, m.stem, model, [0, 0.004, 0.132], [1, 1, 0.9], { ws: 20, hs: 14, wobble: 0.0015 });
         b.ring(0.034, 0.0065, m.gill, model, [0, 0.003, 0.112]);
         b.ring(0.031, 0.0055, m.gill, model, [0, -0.002, 0.155], [0.12, 0, 0]);
@@ -188,10 +154,9 @@ Weapons.register('rifle', {
         const muzzle = b.group(model, [0, 0.012, -0.77]);
         const flash = b.flash(muzzle, null, C.gold, 0.05, 2.5);
 
-        // Spore pouch used during reload (lives on the rig so it can move independently)
         const pouch = b.group();
         pouch.visible = false;
-        b.part(pouch); // rest pose = hidden
+        b.part(pouch);
         const sack = b.lathe([[0.001, 0], [0.024, 0.008], [0.036, 0.03], [0.033, 0.055], [0.016, 0.075], [0.011, 0.082], [0.015, 0.09], [0.013, 0.094]], m.pouch, pouch, null, null, { seg: 20 });
         b.wobble(sack.geometry, 0.003, 50);
         sack.geometry.computeVertexNormals();
@@ -201,9 +166,6 @@ Weapons.register('rifle', {
         const pouchMouth = b.group(pouch, [0, 0.095, 0]);
         b.part(model);
 
-        // Hand grips
-        // grip and handguard hang off `steady`, a copy of the model without the inspect roll (see
-        // handPose), so the carbine rolls inside the hands instead of twisting them round
         const steady = b.group();
         b.grip('grip', steady, [0, -0.08, 0.095], { fingers: [0.65, -0.27, -0.65], back: [0.75, 0.1, 0.6], around: 0.018, curl: 0.9 });
         b.grip('handguard', steady, [0, 0.008, -0.255], { fingers: [0.8, -0.6, 0], back: [-0.6, -0.8, 0], around: 0.03, curl: 0.8 });
@@ -221,7 +183,7 @@ Weapons.register('rifle', {
         w.data.slingSpring = new Spring(40, 2.2);
         w.data.target = new THREE.Vector3();
         w.data.burst = 0;
-        w.data.burstLeft = 0; // pips still lit in the current burst
+        w.data.burstLeft = 0;
         w.data.sel = 0;
     },
 
@@ -230,7 +192,6 @@ Weapons.register('rifle', {
         w.data.slingSpring.kick(o && o.mode === 'burst' ? 1.5 : 0.6);
     },
 
-    // ---- alt fire: 3-round burst ----
     altPress(w) {
         if (w.state !== 'ready' || w.cooldown > 0 || w.data.burst > 0) {
             return;
@@ -289,7 +250,6 @@ Weapons.register('rifle', {
             g.rotation.x += w.data.slosh.x * 0.02 * (i % 3 - 1);
         });
 
-        // sling sway, bubbles, selector + burst pips
         P.sling.rotation.z += w.dangle(w.data.slingSpring, dt, 1.4) * 0.6;
         P.sling.rotation.x += w.data.slingSpring.v * 0.01;
         P.bubbles.forEach((bub, i) => {
@@ -306,11 +266,9 @@ Weapons.register('rifle', {
             mat.emissiveIntensity = 0.15 + lit * 1.8 + (burstOn ? 0 : Math.sin(w.time * 2 + i) * 0.05);
         });
 
-        // inspect: show the vial, tap it, peek the hatch, then roll the carbine a full turn
         const it = w.inspectT;
         if (it >= 0) {
             const env = K.e('inOutCubic', it, 0, 0.5) * (1 - K.e('inOutCubic', it, 2.75, 3.3));
-            // swing muzzle-right so the whole left side (vial, selector, pips) faces you
             P.model.rotation.y -= env * 1.05;
             P.model.rotation.x += env * 0.12;
             P.model.rotation.z -= env * 0.15;
@@ -332,7 +290,6 @@ Weapons.register('rifle', {
             return;
         }
         const tilt = K.e('outCubic', r, 0, 0.36) * (1 - K.e('inOutCubic', r, 2.05, 2.5));
-        // muzzle lifts and the gun rolls in so the hatch on top faces you
         P.model.rotation.z += tilt * 0.45;
         P.model.rotation.x += tilt * 0.35;
         P.model.rotation.y += tilt * 0.12;
@@ -343,12 +300,10 @@ Weapons.register('rifle', {
         P.hatch.rotation.x += open * 1.8;
         P.m.hatchGlow.emissiveIntensity = 0.6 + open * 1.4 + K.hump(r, 0.9, 1.9) * 1.5;
 
-        // Pouch flies in, tips over the hatch and pours, then leaves
         const inP = K.e('outCubic', r, 0.3, 0.72);
         const outP = K.e('inCubic', r, 1.86, 2.16);
         P.pouch.visible = r > 0.3 && r < 2.16;
         if (P.pouch.visible) {
-            // hatch position in rig space, then hover the pouch above-left so its mouth tips over the hole
             const tgt = w.localPos(P.model, [0, 0.087, -0.04], w.data.target);
             tgt.x -= 0.088;
             tgt.y += 0.11;
@@ -387,7 +342,7 @@ Weapons.register('rifle', {
             const loose = K.hump(it, 1.8, 2.75);
             H.left.squeeze(-0.6 * loose);
             H.right.squeeze(-0.5 * loose);
-            H.left.nudge(0, 0, -0.016 * K.hump(it, 0.82, 0.96)); // tap
+            H.left.nudge(0, 0, -0.016 * K.hump(it, 0.82, 0.96));
             H.right.track(it, [[2.58, 2.74, 'bolt'], [3.02, 3.22, 'grip']]);
         }
         const r = w.reloadT;
@@ -428,7 +383,6 @@ Weapons.register('rifle', {
             }
             fx.emit({ world: true, pos: o, vel: d.clone().multiplyScalar(0.8), life: 0.5, size: 0.015, sizeEnd: 0.045, color: 0xd8c9a0, additive: false, opacity: 0.3, drag: 3, gravity: -0.2 });
             fx.emit({ world: true, shape: 'ring', pos: o, dir: d, vel: d.clone().multiplyScalar(1.2), life: 0.12, size: 0.015, sizeEnd: 0.06, color: gold, opacity: 0.7 });
-            // gill vents puff a little dust out of the sides
             for (const side of [-1, 1]) {
                 const p = w.localPos(P.model, [side * 0.034, 0, -0.05]);
                 fx.emit({ pos: p, vel: new THREE.Vector3(side * 0.4, 0.1, 0), life: 0.3, size: 0.004, sizeEnd: 0.012, color: gold, opacity: 0.5, drag: 4 });
@@ -439,7 +393,6 @@ Weapons.register('rifle', {
         if (r < 0) {
             return;
         }
-        // The pour: powder streams from the pouch mouth down into the open hatch
         if (r > 0.9 && r < 1.85) {
             const mouth = w.localPos(P.pouchMouth);
             const n = fx.rate('pour', 160, dt);

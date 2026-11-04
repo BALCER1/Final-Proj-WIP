@@ -1,6 +1,3 @@
-// Great Hall: the original medieval hall map, rebuilt as a room.
-// The standalone version still lives in prototypes/Medieval Hall.html.
-
 (() => {
     const HALL = {
         halfW: 30,
@@ -74,7 +71,6 @@
         }
     }
 
-    // The hall's big double door. Same interface as Door in room-kit.js.
     class HallDoor {
         constructor(b) {
             const L = HALL.halfL;
@@ -148,7 +144,6 @@
             b.box(0, 0, L + 1, W * 2, H, 2, stone);
             b.box(0, H, 0, W * 2 + 4, 1, L * 2 + 4, 0x3d2f24);
 
-            // Back wall with a doorway, and darkness beyond it.
             const dw = 4;
             const dh = 5;
             const side = W - dw / 2;

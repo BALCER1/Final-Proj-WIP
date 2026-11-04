@@ -1,7 +1,3 @@
-// Settings: tabbed menu (Graphics / Display / Audio / Controls), saved to localStorage.
-// Render scale lowers the canvas resolution and lets the browser stretch it back up,
-// a poor man's DLSS: fewer pixels to shade, blurrier (or blockier) image.
-
 const Settings = {
     key: 'fungdung.settings',
     values: {
@@ -17,7 +13,6 @@ const Settings = {
         try {
             Object.assign(this.values, JSON.parse(localStorage.getItem(this.key)) || {});
         } catch (e) {
-            // Corrupt or blocked storage: keep defaults.
         }
 
         const $ = id => document.getElementById(id);
@@ -54,7 +49,6 @@ const Settings = {
         this.el.fullscreen.onchange = () => this.setFullscreen(this.el.fullscreen.value === 'fullscreen');
         document.addEventListener('fullscreenchange', () => {
             const on = !!document.fullscreenElement;
-            // Lock Esc while fullscreen so a tap only pauses the game; holding Esc still exits.
             if (navigator.keyboard) {
                 if (on) {
                     navigator.keyboard.lock(['Escape']).catch(() => {});
@@ -67,7 +61,6 @@ const Settings = {
         });
         addEventListener('resize', () => this.applyResolution());
 
-        // Browsers only allow fullscreen from a click/keypress, so restore it on the first one.
         const restore = () => {
             if (!this.values.fullscreen || document.fullscreenElement) {
                 removeEventListener('pointerdown', restore, true);
@@ -98,7 +91,6 @@ const Settings = {
         try {
             localStorage.setItem(this.key, JSON.stringify(this.values));
         } catch (e) {
-            // Storage unavailable (private mode / file://): settings just won't persist.
         }
     },
 
@@ -106,7 +98,6 @@ const Settings = {
         const v = this.values;
         this.applyResolution();
         renderer.domElement.style.imageRendering = v.upscale === 'sharp' ? 'pixelated' : 'auto';
-        // The <head> script applies this before first paint; this keeps it in sync after.
         document.documentElement.classList.toggle('dark', v.darkMode);
 
         CONFIG.fov = v.fov;

@@ -1,21 +1,3 @@
-// PUFFCAP BLUNDERBUSS - shotgun.
-// Twin hollow-stalk barrels with flared gill bells, a puffball chamber with a hinged lid,
-// a gill-collar pump, and a gnarled root stock wrapped in mycelium.
-// Fire:   puffball squashes and blasts a cone of spores, then the pump racks and spits out a spent husk.
-// Reload: gun rolls in, the puffball lid pops open, the pods it needs sprout in the left palm and
-//         are flicked up into it one at a time, the lid slams shut in a cloud of dust, and the pump racks.
-// Alt (hold right mouse): CHARGE. The pump draws back, the puffball swells and trembles, spores are
-//         sucked into the glowing bells and the side gauge fills. Release for a bigger, tighter,
-//         harder-hitting blast (costs 2 pods when more than half charged).
-// Inspect: turns the gun to show one side, the lid peeks open and puffs, turns to the other side,
-//         checks the pump and settles back.
-// Hands:  right on the grip, left on the pump (it rides the rack). Reload: the left hand flips the
-//         lid open, then turns sideways on the left of the screen, thumb on top, the pods that are
-//         missing held in its loosely curled fingers. Like flipping a coin, one at a time a pod rolls
-//         up onto the curled index finger, the thumb tucks under it and snaps up, flicking it into
-//         the chamber. Then it slaps the lid shut and takes the pump back for the rack.
-//         Inspect: the left hand flicks the lid open.
-
 Weapons.register('shotgun', {
     name: 'Puffcap Blunderbuss',
     altName: 'Charge',
@@ -26,13 +8,11 @@ Weapons.register('shotgun', {
         kick: { back: 0.12, up: 0.22, roll: 0.05 }
     },
     color: 0xb8ff4d,
-    // nine little green spore pellets with short, sparse trails
     projectile: {
         speed: 55, size: 0.016, stretch: 2.5, color: 0xb8ff4d, core: 0xf4ffd6, maxDist: 28,
         trail: { spacing: 0.55, life: 0.18, size: 0.011, drift: 0.25, sparks: 0.08, length: 10 },
         impact: { count: 3, size: 0.016 }
     },
-    // charged blast: fatter, faster, brighter pellets
     chargedProjectile: {
         speed: 75, size: 0.024, stretch: 3, color: 0xd6ff6e, core: 0xffffff, maxDist: 34,
         trail: { spacing: 0.45, life: 0.24, size: 0.014, drift: 0.3, sparks: 0.2, length: 14 },
@@ -61,24 +41,20 @@ Weapons.register('shotgun', {
             vent: b.mat('vent', { color: 0x3b2c1c, roughness: 1 })
         };
         const model = b.group();
-        const by = 0.045; // barrel height
+        const by = 0.045;
 
-        // Barrels
         for (const x of [-0.031, 0.031]) {
             b.tubeZ(0.024, 0.03, 0.5, m.stem, model, [x, by, -0.33], { wobble: 0.0025, seed: x * 100 });
             b.tubeZ(0.043, 0.025, 0.07, m.gill, model, [x, by, -0.612], { open: true, seg: 18 });
             b.disc(0.024, m.dark, model, [x, by, -0.6], [0, Math.PI, 0]);
             b.ring(0.042, 0.006, m.cap, model, [x, by, -0.647]);
             b.ring(0.027, 0.005, m.gill, model, [x, by, -0.12]);
-            // glowing inner lip of each bell (charges up) + gill heat rings behind it
             b.ring(0.034, 0.0035, m.bell, model, [x, by, -0.636]);
             for (let i = 0; i < 3; i++) {
                 b.ring(0.029 - i * 0.0006, 0.0028, m.gill, model, [x, by, -0.555 + i * 0.016]);
             }
         }
-        // bead sight: a tiny glowing mushroom between the bells
         b.mini(model, [0, by + 0.026, -0.6], 0.016, m.glow, m.stem);
-        // Mycelium wrapped around both barrels
         const helix = [];
         for (let i = 0; i <= 44; i++) {
             const a = i * 0.62;
@@ -86,19 +62,16 @@ Weapons.register('shotgun', {
         }
         b.tube(helix, 0.0026, 0.0018, m.myc, model, { seg: 140, radial: 5, wobble: 0.002, freq: 90 });
 
-        // Gill-collar pump
         const pump = b.part(b.group(model, [0, 0, -0.38]));
         b.tubeZ(0.062, 0.068, 0.095, m.cap, pump, [0, by - 0.006, 0], { seg: 20, wobble: 0.002 });
         b.ring(0.066, 0.008, m.gill, pump, [0, by - 0.006, -0.048]);
         b.ring(0.07, 0.008, m.gill, pump, [0, by - 0.006, 0.048]);
         for (let i = 0; i < 14; i++) {
-            const a = Math.PI + (i / 13 - 0.5) * 2.4; // ridges underneath where a hand would grip
+            const a = Math.PI + (i / 13 - 0.5) * 2.4;
             b.box(0.006, 0.006, 0.08, m.gill, pump, [Math.sin(a) * 0.069, by - 0.006 + Math.cos(a) * 0.069, 0], [0, 0, -a]);
         }
 
-        // Frame under the chamber
         b.tubeZ(0.034, 0.04, 0.2, m.stem, model, [0, 0.022, -0.01], { wobble: 0.002 });
-        // charge gauge: five spore nodes set into the left side of the frame
         const gauge = [];
         b.rbox(0.006, 0.014, 0.13, 0.003, m.wood, model, [-0.036, 0.02, -0.03]);
         for (let i = 0; i < 5; i++) {
@@ -107,7 +80,6 @@ Weapons.register('shotgun', {
             gauge.push(mat);
         }
 
-        // Puffball chamber: open-topped body + hinged lid + six spore pods inside
         const R = 0.085;
         const cut = 0.86;
         const chamber = b.part(b.group(model, [0, 0.068, -0.02], null, [1, 0.86, 1.18]));
@@ -124,10 +96,8 @@ Weapons.register('shotgun', {
         const lid = b.part(b.group(chamber, [0, cy, cr]));
         b.sphere(R, m.puff, lid, [0, -cy, -cr], null, { ws: 24, hs: 10, tl: cut, wobble: 0.003, freq: 70 });
         const lidSprout = b.part(b.mini(lid, [0, R - cy - 0.004, -cr], 0.03, m.cap, m.stem));
-        // mycelium strap round the puffball's waist, with a buckle cap
         b.ring(R * 1.0, 0.0045, m.myc, chamber, [0, -0.012, 0], [Math.PI / 2, 0, 0], { ts: 40 });
         b.cap(0.012, 0.008, m.cap, null, chamber, [R * 0.99, -0.012, 0], [0, 0, -Math.PI / 2], { seg: 12 });
-        // breathing pores on the right side that leak wisps of spores
         const vents = [];
         for (const [th, ph] of [[1.75, 0.35], [2.05, -0.15], [1.55, -0.55], [2.2, 0.6]]) {
             const n = new THREE.Vector3(Math.sin(th) * Math.cos(ph), Math.cos(th), Math.sin(th) * Math.sin(ph));
@@ -138,7 +108,6 @@ Weapons.register('shotgun', {
             b.ring(0.0058, 0.0016, m.wart, g, null, [Math.PI / 2, 0, 0], { ts: 12, rs: 5 });
             vents.push(g);
         }
-        // warts on the puffball
         const rnd = WeaponKit.rng(7);
         const wartGeo = new THREE.ConeGeometry(0.004, 0.007, 5);
         for (let i = 0; i < 26; i++) {
@@ -150,7 +119,6 @@ Weapons.register('shotgun', {
             wart.quaternion.setFromUnitVectors(new THREE.Vector3(0, 1, 0), n);
         }
 
-        // Grip, trigger and root stock
         b.tube([[0, 0.01, 0.04], [0, -0.05, 0.06], [0, -0.115, 0.09]], 0.022, 0.019, m.wood, model, { wobble: 0.003, ends: true });
         b.ring(0.024, 0.0035, m.stem, model, [0, -0.012, 0.0], [0, Math.PI / 2, 0], { arc: Math.PI });
         b.box(0.005, 0.022, 0.008, m.gill, model, [0, -0.01, 0.005], [0.3, 0, 0]);
@@ -158,9 +126,7 @@ Weapons.register('shotgun', {
         b.tube([[0.01, 0.0, 0.2], [0.04, -0.03, 0.24], [0.05, -0.07, 0.27]], 0.009, 0.003, m.wood, model, { wobble: 0.002, seg: 12 });
         b.tube([[-0.01, -0.02, 0.25], [-0.04, -0.06, 0.28], [-0.045, -0.1, 0.3]], 0.008, 0.002, m.wood, model, { wobble: 0.002, seg: 12 });
         b.tube([[0.03, 0.02, 0.1], [0.036, 0.005, 0.18], [0.03, -0.02, 0.25]], 0.003, 0.002, m.myc, model, { seg: 16, radial: 5 });
-        // butt pad: a broad flat cap capping the root stock
         b.cap(0.05, 0.014, m.cap, m.gill, model, [0, -0.074, 0.352], [Math.PI / 2 - 0.45, 0, 0], { flat: 0.5, fins: 16 });
-        // spare pods woven onto the right of the stock
         b.rbox(0.008, 0.03, 0.09, 0.004, m.wood, model, [0.038, -0.01, 0.2], [0.32, 0, 0]);
         for (let i = 0; i < 3; i++) {
             const z = 0.17 + i * 0.03;
@@ -168,14 +134,12 @@ Weapons.register('shotgun', {
             b.sphere(0.011, m.glow, model, [0.047, y, z], [0.8, 1, 1], { ws: 10, hs: 8 });
             b.ring(0.011, 0.0022, m.myc, model, [0.047, y, z], [0, Math.PI / 2, 0], { ts: 14, rs: 4 });
         }
-        // sling loop and a swinging puffball charm on a mycelium cord
         b.ring(0.008, 0.002, m.stem, model, [0, -0.052, 0.22], [0, Math.PI / 2, 0], { ts: 14, rs: 4 });
         const charm = b.part(b.group(model, [0, -0.06, 0.22]));
         b.tube([[0, 0, 0], [0.002, -0.022, 0], [0, -0.042, 0]], 0.0013, 0.0013, m.myc, charm, { seg: 8, radial: 4 });
         b.sphere(0.011, m.puff, charm, [0, -0.052, 0], [1, 0.9, 1], { ws: 12, hs: 8, wobble: 0.001, freq: 200 });
         b.mini(charm, [0, -0.044, 0], 0.012, m.cap, m.stem);
 
-        // Little mushrooms sprouting along the barrels (they jiggle)
         const sprouts = [
             b.mini(model, [0, by + 0.028, -0.22], 0.026, m.cap, m.stem, [0, 0, 0.2]),
             b.mini(model, [0.012, by + 0.026, -0.27], 0.018, m.cap, m.stem, [0, 0, -0.3]),
@@ -188,16 +152,10 @@ Weapons.register('shotgun', {
 
         const bells = [-0.031, 0.031].map(x => b.group(model, [x, by, -0.64]));
 
-        // Hand grips
         b.grip('grip', model, [0, -0.07, 0.069], { fingers: [0.65, -0.27, -0.65], back: [0.75, 0.1, 0.6], around: 0.021, curl: 0.9 });
         b.grip('pump', pump, [0, by - 0.006, 0], { fingers: [0.8, -0.6, 0], back: [-0.6, -0.8, 0], around: 0.066, curl: 0.7 });
         b.grip('lidL', lid, [-0.088, 0.004, -0.07], { fingers: [0, 0.5, -1], back: [-1, 0.2, 0], curl: 0.45 });
         b.grip('lidTop', lid, [-0.03, 0.045, -0.06], { fingers: [0.2, 0, -1], back: [-0.35, 1, 0], curl: 0.2 });
-        // Reload pods are flicked from here: the left hand sideways, thumb up, palm towards you and
-        // fingers pointing at the gun, out on the left of the screen. It lives in rig space so it
-        // stays put while the gun rolls. podSlots are in hand space (+X is up, towards the thumb):
-        // [0] on top of the curled index finger, where each pod is flicked from, then the places the
-        // waiting pods sit inside the curled fingers.
         const flick = b.grip('flick', null, [-0.4, 0.02, 0.16], { fingers: [1, 0.05, -0.3], back: [0, -0.25, -1], curl: 0.6 });
         const podSlots = [
             [0.045, -0.031, -0.029],
@@ -223,7 +181,6 @@ Weapons.register('shotgun', {
         w.data.charmSpring.kick(o && o.mode === 'charged' ? 5 : 3);
     },
 
-    // ---- alt fire: charge ----
     altPress(w) {
         if (w.state !== 'ready' || w.cooldown > 0) {
             return;
@@ -265,21 +222,17 @@ Weapons.register('shotgun', {
         w.data.charge = 0;
     },
 
-    // Timing for each pod flicked in during a reload: [launch, landed].
     podWindow(w, k) {
         const missing = w.stats.mag - w.reloadFrom;
         const start = 0.52 + k * (0.85 / Math.max(1, missing));
         return [start, start + 0.28];
     },
-    // Time between flicks, how long a pod takes to roll onto the fingers after the one before it
-    // goes, and how long the fingers take to flatten again.
     podGap(w) {
         return 0.85 / Math.max(1, w.stats.mag - w.reloadFrom);
     },
     podRoll(w) {
         return Math.min(0.12, this.podGap(w) * 0.6);
     },
-    // Where waiting pod k sits in the hand at time r: 0 = on the fingers, 1+ = palm slots.
     podQueue(w, k, r) {
         let q = k;
         const roll = this.podRoll(w);
@@ -303,7 +256,6 @@ Weapons.register('shotgun', {
         P.charm.rotation.z += sw * 0.9;
         P.charm.rotation.x += Math.sin(w.time * 1.7) * 0.05 + w.data.charmSpring.v * 0.02;
 
-        // ---- charging ----
         const charging = w.state === 'charge';
         const c = charging ? w.data.charge : 0;
         const ce = K.ease.outQuad(c);
@@ -327,7 +279,6 @@ Weapons.register('shotgun', {
             });
         }
 
-        // ---- inspect ----
         const it = w.inspectT;
         if (it >= 0) {
             const env = K.e('inOutCubic', it, 0, 0.5) * (1 - K.e('inOutCubic', it, 2.8, 3.4));
@@ -352,7 +303,6 @@ Weapons.register('shotgun', {
             s.rotation.x += w.data.jiggle.x * 0.04;
         });
 
-        // Fire: puffball squash, then pump rack
         if (f < 0.7) {
             const sq = K.hump(f, 0, 0.14) * 0.2;
             P.chamber.scale.y *= 1 - sq;
@@ -366,14 +316,12 @@ Weapons.register('shotgun', {
             P.model.position.y -= rack * 0.012;
         }
 
-        // Pods show the ammo count
         P.pods.forEach((pod, i) => {
             pod.visible = i < w.ammo;
         });
 
         if (r >= 0) {
             const tilt = K.e('outCubic', r, 0, 0.32) * (1 - K.e('inOutCubic', r, 1.75, 2.15));
-            // muzzle lifts and the gun rolls in so the open chamber faces you
             P.model.rotation.z += tilt * 0.45;
             P.model.rotation.x += tilt * 0.38;
             P.model.rotation.y += tilt * 0.12;
@@ -390,13 +338,11 @@ Weapons.register('shotgun', {
                 w.data.jiggle.kick(7);
             }
 
-            // rig space -> chamber space, for the pods waiting in the hand
             P.model.updateMatrix();
             P.chamber.updateMatrix();
             const toChamber = w.data.m4.multiplyMatrices(P.model.matrix, P.chamber.matrix).invert();
             const from = w.data.podFrom.copy(P.podSlots[0]).applyMatrix4(toChamber);
             const at = w.data.podAt;
-            // the chamber is squashed and stretched, so undo that for the pods in the hand to keep them round
             const cs = P.chamber.scale;
             const round = w.data.podRound.set(0.7 / cs.x, 0.7 / cs.y, 0.7 / cs.z);
             const missing = w.stats.mag - w.reloadFrom;
@@ -404,19 +350,16 @@ Weapons.register('shotgun', {
                 const pod = P.pods[w.reloadFrom + k];
                 const [a, z] = this.podWindow(w, k);
                 const p = K.seg(r, a, z);
-                // all the pods needed sprout in the palm as the hand turns over
                 const grow = K.ease.outBack(K.seg(r, 0.36 + k * 0.025, 0.5 + k * 0.025));
                 pod.visible = grow > 0;
                 const rest = pod.userData.rest.p;
                 if (pod.visible && r < a) {
-                    // waiting in the palm, rolling up towards the fingers as the ones before it go
                     const q = Math.min(P.podSlots.length - 1, this.podQueue(w, k, r));
                     const i = Math.floor(q);
                     at.copy(P.podSlots[i]).lerp(P.podSlots[Math.min(i + 1, P.podSlots.length - 1)], q - i).applyMatrix4(toChamber);
                     pod.position.copy(at);
                     pod.scale.copy(round).multiplyScalar(Math.max(0.001, grow));
                 } else if (pod.visible && p < 1) {
-                    // flicked: flies up fast off the fingers and slows into the chamber
                     const e = K.ease.outQuad(p);
                     pod.position.set(
                         K.lerp(from.x, rest.x, e),
@@ -450,8 +393,6 @@ Weapons.register('shotgun', {
             return;
         }
         H.left.track(r, [[0.0, 0.13, 'lidL'], [0.3, 0.46, 'flick'], [1.36, 1.48, 'lidTop'], [1.64, 1.8, 'pump']]);
-        // a loose fist with the index curled tighter as a shelf for the pod; the thumb rests tucked
-        // under the pod, snaps up to flick it, then tucks back in for the next one
         const flicking = K.seg(r, 0.3, 0.46) * (1 - K.seg(r, 1.36, 1.48));
         H.left.bend('inner', 0.3 * flicking);
         const missing = w.stats.mag - w.reloadFrom;
@@ -461,7 +402,7 @@ Weapons.register('shotgun', {
             const snap = K.e('outQuad', r, a - 0.01, a + 0.04) * (1 - K.e('inOutSine', r, a + 0.05, a + 0.05 + relax));
             H.left.bend('thumb', -1.0 * snap);
         }
-        H.left.nudge(0, -0.014 * K.hump(r, 1.46, 1.62), 0); // slap the lid down
+        H.left.nudge(0, -0.014 * K.hump(r, 1.46, 1.62), 0);
     },
 
     effects(w, dt) {
@@ -470,7 +411,6 @@ Weapons.register('shotgun', {
         const K = WeaponKit;
         const glow = this.color;
 
-        // idle wisps from the puffball's pores (more while charging)
         const charging = w.state === 'charge';
         const c = charging ? w.data.charge : 0;
         const wisps = fx.rate('wisp', 2.5 + c * 25, dt);
@@ -481,7 +421,6 @@ Weapons.register('shotgun', {
             fx.emit({ pos: p, vel: out.multiplyScalar(K.rand(0.05, 0.12)).add(new THREE.Vector3(0, 0.05, 0)), life: K.rand(0.6, 1.1), size: 0.003, sizeEnd: 0.012, color: 0xdfe8c0, additive: false, opacity: 0.35, drag: 1.5, gravity: -0.08 });
         }
         if (charging) {
-            // spores are sucked into both bells
             P.bells.forEach((bell, k) => {
                 const bp = w.localPos(bell, null, w.data.bellPos[k]);
                 const n = fx.rate('suck' + k, 20 + c * 70, dt);
@@ -534,7 +473,6 @@ Weapons.register('shotgun', {
             fx.emit({ world: true, shape: 'ring', pos: o, dir: d, vel: d.clone().multiplyScalar(1.5), life: 0.2, size: 0.03, sizeEnd: 0.14, color: glow, opacity: 0.8 });
         }
         if (w.atFire(0.33)) {
-            // spent husk out of the right side when the pump racks
             const p = w.localPos(P.chamber, [0.07, 0.03, 0]);
             fx.emit({ pos: p, vel: new THREE.Vector3(1.3, 1.1, 0.5), life: 0.8, size: 0.013, sizeEnd: 0.011, color: 0x7e6440, additive: false, gravity: 6, drag: 0.4 });
             for (let i = 0; i < 4; i++) {
@@ -552,7 +490,6 @@ Weapons.register('shotgun', {
                 fx.emit({ pos: p, vel: K.sphereDir().multiplyScalar(0.25).add(new THREE.Vector3(0, 0.25, 0)), life: 0.6, size: 0.006, sizeEnd: 0.02, color: 0xd9d0b0, additive: false, opacity: 0.5, drag: 3 });
             }
         }
-        // puff off the flick, trail on flying pods + sparkle when they land
         const missing = w.stats.mag - w.reloadFrom;
         for (let k = 0; k < missing; k++) {
             const pod = P.pods[w.reloadFrom + k];

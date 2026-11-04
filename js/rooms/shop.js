@@ -1,4 +1,3 @@
-// Shop room. Placeholder: a plain green box with an exit door. Build the real room here.
 Rooms.register('shop', {
     name: 'Shop',
     icon: '$',

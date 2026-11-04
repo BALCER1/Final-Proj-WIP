@@ -1,21 +1,3 @@
-// AMANITA LONGSHOT - bolt-action sniper.
-// A long pale stalk barrel ringed with gill "charge coils", a red fly-agaric reactor cap with
-// white spots, a hollow-stalk scope with a bioluminescent lens, an annulus skirt and root bipod.
-// Fire:   heavy kick, violet flash and double shockwave, coils fire front-to-back, spots dim,
-//         then a full bolt cycle (lift, pull, eject husk, push, lock).
-// Reload: gun lifts and tilts the cap towards you; violet spores are drawn in from the air and
-//         spiral into the cap, spots light up one charge at a time, the cap throbs like a heartbeat,
-//         coils ignite back-to-front, the cap pops with a burst and the bolt is cycled.
-// Alt (hold right mouse): SCOPE. The lens cover flips open, the gun rises until the eyepiece is at
-//         your eye, then the view zooms in (w.zoom -> the host narrows the FOV and shows the scope
-//         overlay). Scoped shots are perfectly accurate; hip-fire has some spread. The bolt cycle
-//         pulls you out of the scope for a moment, and you settle back in if still holding.
-// Inspect: lifts the rifle, spins the reactor cap with a wave of light across its spots, flips the
-//         lens cover, glints the lens and checks the bolt.
-// Hands:  right on the grip (works the bolt after every shot), left under the barrel. Reload: the
-//         left hand hovers open over the cap drawing the spores in and clenches when it pops.
-//         Inspect: the left hand sets the cap spinning and flicks the lens cover.
-
 Weapons.register('sniper', {
     name: 'Amanita Longshot',
     altName: 'Scope',
@@ -26,14 +8,12 @@ Weapons.register('sniper', {
         kick: { back: 0.15, up: 0.3, roll: 0.06 }
     },
     color: 0xc77dff,
-    // charged violet bolt with two spore strands spiralling round its trail
     projectile: {
         speed: 130, size: 0.028, stretch: 8, color: 0xc77dff, core: 0xffffff, maxDist: 120,
         trail: { spacing: 0.32, life: 0.5, size: 0.013, drift: 0.08, sparks: 0.15, length: 28 },
         spiral: { radius: 0.06, freq: 2.6, strands: 2, color: 0xffd6f6 },
         impact: { count: 14, size: 0.026, ring: 0.35 }
     },
-    // the host narrows the camera to this FOV while w.zoom is 1
     scope: { fov: 16, sensitivity: 0.3 },
     inspect: { time: 3.4 },
     hands: { left: 'forend', right: 'grip' },
@@ -57,7 +37,6 @@ Weapons.register('sniper', {
         };
         const model = b.group();
 
-        // Barrel + charge coils (each coil has its own material so they can light in sequence)
         b.tubeZ(0.012, 0.016, 0.8, m.stem, model, [0, 0.008, -0.54], { wobble: 0.001 });
         const coils = [];
         for (let i = 0; i < 7; i++) {
@@ -68,42 +47,37 @@ Weapons.register('sniper', {
             b.lathe([[0.012, 0], [0.024 - i * 0.0006, 0.004], [0.026 - i * 0.0006, 0.007]], mat, g, null, [Math.PI / 2, 0, 0], { seg: 20 });
             coils.push({ g: b.part(g), mat });
         }
-        // Volva muzzle brake
         const volva = b.lathe([[0.015, 0], [0.024, 0.01], [0.026, 0.03], [0.022, 0.05], [0.025, 0.056]], m.gill, model, [0, 0.008, -0.92], [-Math.PI / 2, 0, 0], { seg: 20 });
         b.displace(volva.geometry, v => (v.y > 0.045 ? 0.004 * Math.sin(Math.atan2(v.z, v.x) * 9) : 0));
         b.disc(0.013, m.dark, model, [0, 0.008, -0.968], [0, Math.PI, 0]);
-        // Root bipod folded under the barrel
         for (const s of [-1, 1]) {
             b.tube([[s * 0.008, -0.01, -0.5], [s * 0.016, -0.02, -0.62], [s * 0.014, -0.022, -0.76]], 0.004, 0.0025, m.wood, model, { seg: 12, radial: 6, ends: true });
         }
         b.ring(0.018, 0.004, m.wood, model, [0, -0.002, -0.5], [0, 0, 0], { scale: [1.2, 1, 1] });
 
-        // Receiver + annulus skirt
         b.tubeZ(0.035, 0.04, 0.32, m.stem, model, [0, 0, -0.02], { wobble: 0.0015 });
         const skirt = b.lathe([[0.039, 0], [0.047, 0.012], [0.058, 0.026], [0.064, 0.034]], m.gill, model, [0, 0, 0.06], [Math.PI / 2, 0, 0], { seg: 30 });
         b.displace(skirt.geometry, v => (v.y > 0.02 ? 0.003 * Math.sin(Math.atan2(v.z, v.x) * 11) : 0));
 
-        // Reactor: the fly agaric cap on a short stem
         const reactor = b.part(b.group(model, [0, 0.03, -0.03]));
         b.mesh(new THREE.CylinderGeometry(0.018, 0.024, 0.04, 14), m.stem, reactor, [0, 0.012, 0]);
         b.ring(0.022, 0.004, m.gill, reactor, [0, 0.022, 0], [Math.PI / 2, 0, 0]);
         const cap = b.part(b.cap(0.088, 0.052, m.cap, m.gill, reactor, [0, 0.03, 0], null, { flat: 0.7, fins: 24, stemR: 0.02 }));
         const spots = b.spots(cap, 22, m.spot, 0.011, 3).map(s => b.part(s));
 
-        // Scope riding on top of the cap
         const sy = 0.122;
         b.tubeZ(0.019, 0.021, 0.22, m.stem, model, [0, sy, -0.03], { wobble: 0.001 });
         b.tubeZ(0.027, 0.019, 0.035, m.stem, model, [0, sy, -0.155], { open: true });
         b.disc(0.024, m.lens, model, [0, sy, -0.16], [0, Math.PI, 0]);
         b.ring(0.024, 0.004, m.gill, model, [0, sy, -0.172]);
         b.tubeZ(0.02, 0.024, 0.03, m.stem, model, [0, sy, 0.095], { open: true });
-        b.disc(0.019, m.lensRear, model, [0, sy, 0.1]);
+        b.tubeZ(0.0215, 0.0215, 0.014, m.dark, model, [0, sy, 0.105], { open: true, seg: 22, hseg: 1 });
+        b.disc(0.0215, m.lensRear, model, [0, sy, 0.0985]);
         b.ring(0.024, 0.004, m.gill, model, [0, sy, 0.11]);
         for (const z of [-0.1, 0.05]) {
             b.mesh(new THREE.CylinderGeometry(0.006, 0.009, 0.04, 8), m.stem, model, [0, sy - 0.03, z]);
         }
         b.part(b.mini(model, [-0.016, sy + 0.012, 0.035], 0.016, m.cap, m.stem, [0, 0, 0.5]));
-        // turrets: elevation on top, windage on the right, each a little capped dial with tick ridges
         const turrets = [];
         for (const [pos, rot] of [[[0, sy + 0.021, -0.03], [0, 0, 0]], [[0.021, sy, -0.03], [0, 0, -Math.PI / 2]]]) {
             const g = b.group(model, pos, rot);
@@ -117,27 +91,23 @@ Weapons.register('sniper', {
             b.box(0.0016, 0.002, 0.008, m.spotWhite, dial, [0, 0.006, -0.004]);
             turrets.push(dial);
         }
-        // eyecup (soft gill ring) and a hinged lens cover on the front of the scope
         b.lathe([[0.024, 0], [0.027, 0.008], [0.029, 0.016]], m.gill, model, [0, sy, 0.112], [Math.PI / 2, 0, 0], { seg: 22 });
         const cover = b.part(b.group(model, [0, sy + 0.029, -0.174]));
         const lid = b.cap(0.029, 0.009, m.cap, m.gill, cover, [0, -0.029, -0.004], [-Math.PI / 2, 0, 0], { seg: 18, fins: 0, flat: 0.5 });
         b.spots(lid, 5, m.spot, 0.004, 13, 0.25, 1.2);
         b.ring(0.004, 0.0015, m.stem, cover, [0, 0, 0], [0, Math.PI / 2, 0], { ts: 10, rs: 4 });
 
-        // Bolt: a stalk lever ending in a little fly agaric knob
         const bolt = b.part(b.group(model, [0.036, 0.006, 0.08]));
         b.mesh(new THREE.CylinderGeometry(0.0045, 0.005, 0.045, 8), m.stem, bolt, [0.022, 0, 0], [0, 0, Math.PI / 2]);
         const knob = b.cap(0.014, 0.012, m.cap, m.gill, bolt, [0.044, 0, 0], [0, 0, -Math.PI / 2], { fins: 0, seg: 14 });
         b.spots(knob, 4, m.spot, 0.003, 9);
 
-        // Shroud fins between receiver and coils (gills, radially)
         for (let i = 0; i < 10; i++) {
             const a = (i / 10) * Math.PI * 2;
             b.box(0.002, 0.012, 0.03, m.gill, model, [Math.cos(a) * 0.022, 0.008 + Math.sin(a) * 0.022, -0.185], [0, 0, a + Math.PI / 2]);
         }
         b.ring(0.024, 0.003, m.cap, model, [0, 0.008, -0.17]);
 
-        // Grip, trigger guard, long stock
         b.tube([[0, -0.02, 0.07], [0, -0.07, 0.09], [0, -0.13, 0.115]], 0.019, 0.017, m.wood, model, { wobble: 0.002, ends: true });
         b.ring(0.022, 0.0032, m.stem, model, [0, -0.03, 0.03], [0, Math.PI / 2, 0], { arc: Math.PI });
         b.box(0.004, 0.02, 0.007, m.gill, model, [0, -0.03, 0.035], [0.3, 0, 0]);
@@ -146,7 +116,6 @@ Weapons.register('sniper', {
         const butt = b.cap(0.052, 0.018, m.cap, m.gill, model, [0, -0.035, 0.375], [Math.PI / 2, 0, 0], { fins: 16, flat: 0.5 });
         b.spots(butt, 7, m.spot, 0.006, 5, 0.3, 1.3);
         b.tube([[0.03, 0.0, 0.13], [0.035, -0.02, 0.22], [0.03, -0.05, 0.32]], 0.0028, 0.002, m.myc, model, { seg: 20, radial: 5 });
-        // mycelium cord wrapped round the grip
         const wrap = [];
         for (let i = 0; i <= 40; i++) {
             const t = i / 40;
@@ -156,7 +125,6 @@ Weapons.register('sniper', {
             wrap.push([Math.cos(a) * 0.0205, y, z + Math.sin(a) * 0.0205]);
         }
         b.tube(wrap, 0.0022, 0.0022, m.myc, model, { seg: 160, radial: 4 });
-        // cheek pad dotted like a cap, and a sling stud
         const pad = b.cap(0.028, 0.008, m.cap, null, model, [0.0, 0.036, 0.25], [0, 0, 0], { seg: 18, flat: 0.4, scale: [1, 1, 2.2] });
         b.spots(pad, 6, m.spot, 0.004, 21, 0.4, 1.3);
         b.ring(0.006, 0.0018, m.stem, model, [0, -0.06, 0.3], [0, Math.PI / 2, 0], { ts: 12, rs: 4 });
@@ -167,13 +135,12 @@ Weapons.register('sniper', {
 
         const lens = b.group(model, [0, sy, -0.165]);
 
-        // Hand grips
         b.grip('grip', model, [0, -0.08, 0.095], { fingers: [0.65, -0.27, -0.65], back: [0.75, 0.1, 0.6], around: 0.018, curl: 0.9 });
         b.grip('forend', model, [0, 0.004, -0.27], { fingers: [0.8, -0.6, 0], back: [-0.6, -0.8, 0], around: 0.024, curl: 0.85 });
         b.grip('bolt', bolt, [0.044, 0, 0], { fingers: [0, -0.3, -1], back: [1, 0.3, 0], around: 0.014, curl: 0.75 });
         b.grip('cap', model, [-0.115, 0.11, -0.03], { fingers: [0.3, 0.2, -1], back: [-0.6, 0.8, 0], curl: 0.1 });
         b.grip('capSide', model, [0.12, 0.065, 0.02], { fingers: [0, 0, -1], back: [1, 0.3, 0], curl: 0.2 });
-        b.grip('cover', cover, [0.042, -0.03, -0.006], { fingers: [-0.3, 0, -1], back: [1, 0, 0], curl: 0.3 });
+        b.grip('cover', cover, [0, -0.1, -0.045], { fingers: [0, 1, 0.2], back: [0, 0, -1], curl: 0.35 });
         return { model, reactor, cap, spots, coils, bolt, turrets, cover, lens, muzzle, flashes: [flash], m };
     },
 
@@ -182,11 +149,9 @@ Weapons.register('sniper', {
         w.data.aim = 0;
     },
 
-    // ---- alt fire: scope ----
     altTick(w, dt, move) {
         const K = WeaponKit;
         const d = w.data;
-        // stay scoped for a moment to watch the shot land, then the bolt cycle pulls you off
         const bolting = w.fireT > 0.2 && w.fireT < 0.85;
         const want = w.altHeld && w.state === 'ready' && !bolting && !(move && move.sprinting);
         d.aim = K.clamp(d.aim + (want ? dt / 0.24 : -dt / 0.16));
@@ -202,7 +167,6 @@ Weapons.register('sniper', {
         w.spreadScale = 1;
     },
 
-    // How "charged" the cap is (0..1).
     charge(w) {
         const r = w.reloadT;
         if (r < 0) {
@@ -211,7 +175,6 @@ Weapons.register('sniper', {
         return WeaponKit.lerp(w.reloadFrom / w.stats.mag, 1, WeaponKit.e('inOutSine', r, 0.4, 2.25));
     },
 
-    // Bolt cycle starting at time t0 on timeline t.
     boltCycle(P, t, t0) {
         const K = WeaponKit;
         const up = K.e('outCubic', t, t0, t0 + 0.1) * (1 - K.e('inOutCubic', t, t0 + 0.38, t0 + 0.5));
@@ -230,12 +193,10 @@ Weapons.register('sniper', {
         const charge = this.charge(w);
         const t = w.time;
 
-        // Spots and lens reflect the charge
         P.m.spot.emissiveIntensity = 0.05 + charge * 0.75 + Math.sin(t * 2.2) * 0.1 * charge + (r >= 0 ? WeaponKit.hump(r, 2.2, 2.6) * 1.2 : 0);
         P.m.lens.emissiveIntensity = 0.8 + charge * 0.8;
         P.coils.forEach((c, i) => {
             let e = 0.12 + charge * 0.25;
-            // shot ripple: coils flash from the receiver to the muzzle
             e += Math.exp(-Math.max(0, f - i * 0.012) * 18) * (f >= i * 0.012 ? 3 : 0);
             if (r >= 0) {
                 const on = K.e('outCubic', r, 1.35 + (6 - i) * 0.11, 1.5 + (6 - i) * 0.11);
@@ -245,7 +206,6 @@ Weapons.register('sniper', {
             c.mat.emissiveIntensity = e;
         });
 
-        // ---- scope: bring the eyepiece to the eye ----
         const aim = K.ease.inOutSine(w.data.aim);
         if (aim > 0) {
             P.model.position.x -= 0.27 * aim;
@@ -255,15 +215,13 @@ Weapons.register('sniper', {
         }
         const it = w.inspectT;
         const coverOpen = Math.max(K.ease.outBack(K.seg(w.data.aim, 0, 0.35)), it >= 0 ? K.hump(it, 1.4, 2.4) : 0);
-        P.cover.rotation.x += coverOpen * 1.75; // hinged at the top: flips up and forward, away from you
+        P.cover.rotation.x += coverOpen * 1.75;
         P.turrets.forEach((d, i) => {
             d.rotation.y += aim * (i ? -0.6 : 0.9) + (it >= 0 ? K.e('inOutCubic', it, 2.0 + i * 0.2, 2.5 + i * 0.2) * Math.PI : 0);
         });
 
-        // ---- inspect ----
         if (it >= 0) {
             const env = K.e('inOutCubic', it, 0, 0.55) * (1 - K.e('inOutCubic', it, 2.85, 3.4));
-            // swing muzzle-right and tip the top towards you: full profile of cap, scope and coils
             P.model.rotation.y -= env * 0.95;
             P.model.rotation.x -= env * 0.12;
             P.model.rotation.z -= env * 0.38;
@@ -280,7 +238,6 @@ Weapons.register('sniper', {
             this.boltCycle(P, Math.min(it, 2.9), 2.4);
         }
 
-        // Fire: cap squash, then bolt cycle
         const sq = K.hump(f, 0, 0.16) * 0.16;
         P.cap.scale.y *= 1 - sq;
         P.cap.scale.x *= 1 + sq * 0.4;
@@ -300,7 +257,6 @@ Weapons.register('sniper', {
         P.model.position.y += raise * 0.035;
         P.model.position.z += raise * 0.06;
 
-        // heartbeat throb while absorbing, then a pop when fully charged
         const absorbing = K.seg(r, 0.3, 0.6) * (1 - K.seg(r, 2.15, 2.3));
         const beat = Math.pow(Math.max(0, Math.sin(r * 8.5)), 6) * 0.07 * absorbing;
         const pop = K.hump(r, 2.26, 2.46) * 0.16;
@@ -322,7 +278,7 @@ Weapons.register('sniper', {
         const it = w.inspectT;
         if (it >= 0) {
             H.left.track(it, [[0.25, 0.42, 'capSide'], [0.72, 0.92, 'forend'], [1.2, 1.4, 'cover'], [1.7, 1.95, 'forend']]);
-            H.left.nudge(0, 0, -0.07 * K.e('inOutCubic', it, 0.44, 0.62)); // swipe the cap round
+            H.left.nudge(0, 0, -0.07 * K.e('inOutCubic', it, 0.44, 0.62));
             H.right.track(it, [[2.24, 2.4, 'bolt'], [2.92, 3.12, 'grip']]);
         }
         const r = w.reloadT;
@@ -348,7 +304,6 @@ Weapons.register('sniper', {
             }
         }
 
-        // (scoped shots skip the muzzle blast: the gun is hidden and the scope overlay flashes instead)
         if (w.atFire(0) && w.zoom < 0.5) {
             const o = w.worldPos(P.muzzle);
             const d = w.worldDir(P.muzzle);
@@ -361,7 +316,6 @@ Weapons.register('sniper', {
             for (let i = 0; i < 6; i++) {
                 fx.emit({ world: true, pos: o, vel: K.cone(d, 0.7).multiplyScalar(K.rand(0.4, 1.2)), life: K.rand(0.8, 1.3), size: 0.02, sizeEnd: 0.1, color: 0xd9c9e6, additive: false, opacity: 0.35, drag: 3, gravity: -0.2 });
             }
-            // spent charge leaks off the cap
             const c = w.localPos(P.cap, [0, 0.03, 0]);
             for (let i = 0; i < 10; i++) {
                 fx.emit({ pos: c, vel: K.sphereDir().multiplyScalar(0.25).add(new THREE.Vector3(0, 0.2, 0)), life: 0.5, size: 0.004, color: glow, drag: 2 });

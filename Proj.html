@@ -158,7 +158,6 @@
     pointer-events: none;
   }
 
-  /* ---------- Theme (menus only; html.dark is set by Settings) ---------- */
   :root {
     --bg: #fff;
     --overlay: rgba(255, 255, 255, .94);
@@ -187,7 +186,6 @@
     color-scheme: dark;
   }
 
-  /* ---------- Intro ---------- */
   #introScreen {
     z-index: 10;
     background: var(--bg);
@@ -199,7 +197,6 @@
     pointer-events: none;
   }
 
-  /* Shared red-on-white wordmark, used by the intro and the main menu. */
   .screen .logo {
     margin: 0;
     font-size: 96px;
@@ -210,7 +207,6 @@
     text-rendering: geometricPrecision;
   }
 
-  /* Moved every frame by Intro (js/intro.js); squashes from its base. */
   .screen #introTitle {
     font-size: clamp(80px, 11vw, 150px);
     transform: translate3d(0, 60vh, 0);
@@ -219,7 +215,6 @@
     backface-visibility: hidden;
   }
 
-  /* ---------- Main menu ---------- */
   #mainMenu {
     background: var(--bg);
     animation: fadeIn .5s ease;
@@ -259,7 +254,6 @@
     from { opacity: 0; }
   }
 
-  /* ---------- Settings ---------- */
   #optionsMenu {
     color: var(--text);
     background: var(--overlay);

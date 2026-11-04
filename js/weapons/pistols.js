@@ -1,24 +1,4 @@
-// CHANTERELLE EAGLES - dual pistols, full auto, firing alternately.
-// Two small Desert Eagle-style hand cannons grown from mushroom parts: a chunky golden chanterelle
-// slide (gill-rib serrations at the back, forking false-gill ridges down the sides, a frilly flared
-// muzzle), a pale stem frame and rail, a bark grip with gill panels, a curled-cap hammer and a glowing
-// teal spore sac seated in the magazine well. A spore "port" on the slide glows with the ammo left.
-// Fire:   hold to fire, right/left alternating. Each gun kicks on its own spring, the slide blows
-//         back and spits a spore husk, the hammer snaps. The slide locks back when a gun runs dry.
-// Reload: both guns twirl and fling their spent sacs, then turn side-on to you while two mycelium
-//         vines spiral out of the sac, up the grip and along the whole slide to the muzzle. Side
-//         shoots curl off and pop little glowing mushrooms, new sacs swell, a pulse of light runs
-//         through the vines, then they wither back and both slides are racked.
-// Alt (right mouse): BOOMERANG THROW. Both guns are rolled flat and wound back, then flung out
-//         spinning: the left one loops out to the left, the right one to the right, trailing teal
-//         spores and damaging what they pass through, then they curve back and are caught.
-// Inspect: both guns come up side-on, get a double revolver twirl, flip to show their other sides,
-//         and each slide is press-checked so its spore port flares.
-// Hands:  one on each grip. They hold a "hold" anchor that follows the gun without its twirls, so the
-//         guns spin in loosened hands; on the throw the hands open and follow through, then catch.
-
 (() => {
-    // The grip is angled back like a Deagle's: this maps a point in grip space into gun space.
     const GA = -0.32;
     const GP = [0, -0.002, 0.03];
     const gripPt = (x, y, z) => [
@@ -38,17 +18,14 @@
             kick: { back: 0.012, up: 0.016, roll: 0.01 }
         },
         color: 0x45ffc8,
-        // teal spore round that weaves slightly as it flies
         projectile: {
             speed: 65, size: 0.014, stretch: 3.5, color: 0x45ffc8, core: 0xe6fff8, maxDist: 50, wobble: 0.03,
             trail: { spacing: 0.32, life: 0.26, size: 0.009, drift: 0.1, sparks: 0.1, length: 16 },
             impact: { count: 6, size: 0.016 }
         },
         inspect: { time: 3.2 },
-        // boomerang throw timeline (seconds) and damage per hit
         throwT: { windup: 0.22, flight: 1.35, catch: 0.32, damage: 30, reach: 6 },
         hands: { left: 'holdL', right: 'holdR' },
-        // open hands after letting go of the throw (rig space)
         throwPose: [
             { p: [-0.3, 0.03, -0.14], fingers: [-0.3, 0.5, -1], back: [-0.3, 0.6, 0.8], curl: 0.1 },
             { p: [0.3, 0.03, -0.14], fingers: [0.3, 0.5, -1], back: [0.3, 0.6, 0.8], curl: 0.1 }
@@ -79,15 +56,12 @@
                 const g = b.group(model, [side * 0.24, 0, 0], [0, side * 0.055, -side * 0.05]);
                 const gun = { g, side };
 
-                // ---- slide (blows back when firing) ----
                 const slide = b.part(b.group(g));
                 gun.slide = slide;
                 b.rbox(0.034, 0.036, 0.2, 0.009, m.chant, slide, [0, 0.033, -0.065]);
-                // rear serrations: gill ribs
                 for (let i = 0; i < 6; i++) {
                     b.box(0.0368, 0.024, 0.0022, m.gill, slide, [0, 0.031, 0.026 - i * 0.0048]);
                 }
-                // forking false-gill ridges down both sides (the chanterelle's signature)
                 for (const sx of [-1, 1]) {
                     for (let k = 0; k < 3; k++) {
                         const y = 0.022 + k * 0.009;
@@ -96,28 +70,23 @@
                         b.box(0.0025, 0.0022, 0.026, m.deep, slide, [sx * 0.0172, y - 0.0025, -0.151], [-0.16, 0, 0]);
                     }
                 }
-                // glowing spore port on the right side (shows ammo)
                 gun.port = b.glow('port' + side, C.glow, 1.2);
                 b.box(0.0016, 0.012, 0.034, gun.port, slide, [0.0172, 0.041, -0.018]);
-                // rail + sights
                 b.rbox(0.012, 0.006, 0.17, 0.002, m.stem, slide, [0, 0.0535, -0.07]);
                 b.mini(slide, [0, 0.056, -0.152], 0.013, m.deep, m.stem);
                 for (const sx of [-1, 1]) {
                     b.box(0.0035, 0.007, 0.005, m.stem, slide, [sx * 0.0042, 0.059, 0.024]);
                 }
-                // frilly chanterelle flare round the muzzle + bore
                 const frill = b.lathe([[0.0075, 0], [0.012, 0.0018], [0.0175, 0.0028], [0.0205, 0.0012]], m.frill, slide, [0, 0.033, -0.1655], [-Math.PI / 2, 0, 0], { seg: 28 });
                 b.displace(frill.geometry, v => (Math.hypot(v.x, v.z) > 0.014 ? 0.0018 * Math.sin(Math.atan2(v.z, v.x) * 7) : 0));
                 b.disc(0.0075, m.dark, slide, [0, 0.033, -0.1665], [0, Math.PI, 0]);
                 b.tubeZ(0.0075, 0.0075, 0.03, m.dark, slide, [0, 0.033, -0.15], { seg: 10, open: true });
 
-                // ---- frame ----
                 b.rbox(0.03, 0.02, 0.19, 0.005, m.stem, g, [0, 0.006, -0.06]);
                 b.mini(g, [-0.0155, 0.008, -0.035], 0.01, m.deep, m.stem, [0, 0, Math.PI / 2]);
                 b.ring(0.018, 0.003, m.stem, g, [0, 0.0, -0.022], [0, Math.PI / 2, Math.PI], { arc: Math.PI });
                 b.box(0.004, 0.016, 0.006, m.gill, g, [0, -0.004, -0.016], [0.35, 0, 0]);
 
-                // ---- grip, angled back ----
                 const grip = b.group(g, GP, [GA, 0, 0]);
                 b.rbox(0.031, 0.104, 0.046, 0.01, m.bark, grip, [0, -0.052, 0]);
                 for (const sx of [-1, 1]) {
@@ -128,21 +97,18 @@
                 b.rbox(0.026, 0.01, 0.018, 0.004, m.stem, grip, [0, -0.002, 0.026]);
                 b.rbox(0.033, 0.006, 0.048, 0.003, m.deep, grip, [0, -0.105, 0]);
 
-                // spore sac in the magazine well
                 gun.sac = b.part(b.group(grip, [0, -0.112, 0.002]));
                 gun.glass = b.glass('glass' + side, 0xdffff5, 0.3);
                 gun.core = b.glow('core' + side, C.glow, 1.2);
                 b.sphere(0.019, gun.glass, gun.sac, null, [1, 0.85, 1.2]);
                 gun.coreMesh = b.part(b.sphere(0.0135, gun.core, gun.sac, null, [1, 0.9, 1.15], { wobble: 0.0015, freq: 120 }));
 
-                // hammer: little curled cap behind the slide
                 gun.hammer = b.part(b.group(g, [0, 0.042, 0.038]));
                 b.mesh(new THREE.CylinderGeometry(0.003, 0.004, 0.016, 6), m.stem, gun.hammer, [0, 0.006, 0.004], [-0.5, 0, 0]);
                 b.cap(0.01, 0.008, m.deep, m.gill, gun.hammer, [0, 0.013, 0.01], [-1.1, 0, 0], { fins: 0, seg: 12 });
 
-                // ---- reload vines: two strands spiralling from the sac up the grip and along the slide ----
                 gun.vines = [];
-                gun.extras = []; // branches, buds and nodules, each with the vine position `u` it hangs off
+                gun.extras = [];
                 const rnd = WeaponKit.rng(side > 0 ? 11 : 23);
                 const up = new THREE.Vector3(0, 1, 0);
                 for (const phase of [0, Math.PI]) {
@@ -171,7 +137,6 @@
                     gun.vines.push(vine);
 
                     const n = pts.length - 1;
-                    // side shoots ending in tiny glowing mushrooms
                     for (let k = 0; k < 4; k++) {
                         const idx = Math.round(WeaponKit.lerp(0.18, 0.92, (k + rnd() * 0.5) / 4) * n);
                         const base = new THREE.Vector3(...pts[idx]);
@@ -188,7 +153,6 @@
                         gun.extras.push({ kind: 'branch', mesh: branch, u: idx / n });
                         gun.extras.push({ kind: 'bud', mesh: bud, u: idx / n });
                     }
-                    // glowing nodules dotted along the vine
                     for (let k = 0; k < 6; k++) {
                         const idx = Math.round(((k + 0.5) / 6) * n);
                         const node = b.sphere(0.0036, m.node, g, pts[idx], null, { ws: 8, hs: 6 });
@@ -198,23 +162,18 @@
                     }
                 }
 
-                // ---- extra detail ----
-                // glowing vine inlay along both sides of the frame
                 for (const sx of [-1, 1]) {
                     b.box(0.0012, 0.0022, 0.15, m.inlay, g, [sx * 0.0152, 0.004, -0.065]);
                     b.box(0.0012, 0.0022, 0.03, m.inlay, g, [sx * 0.0152, 0.008, -0.142], [0.25, 0, 0]);
                 }
-                // compensator slots on top of the slide, just behind the frill
                 for (let i = 0; i < 3; i++) {
                     b.box(0.0045, 0.0015, 0.003, m.dark, slide, [0, 0.0512, -0.13 - i * 0.008]);
                 }
-                // grip medallions: a little chanterelle cap ringed in teal on each panel
                 for (const sx of [-1, 1]) {
                     const med = b.group(grip, [sx * 0.0175, -0.05, 0], [0, 0, -sx * Math.PI / 2]);
                     b.cap(0.0075, 0.004, m.deep, null, med, null, null, { seg: 14 });
                     b.ring(0.008, 0.0012, m.inlay, med, [0, 0.0005, 0], [Math.PI / 2, 0, 0], { ts: 18, rs: 4 });
                 }
-                // lanyard loop and a short mycelium tassel with a spore bead
                 b.ring(0.0045, 0.0013, m.stem, grip, [0, -0.106, 0.024], [0, Math.PI / 2, 0], { ts: 10, rs: 4 });
                 gun.tassel = b.part(b.group(grip, [0, -0.11, 0.026]));
                 b.tube([[0, 0, 0], [0.001, -0.012, 0.001], [0, -0.024, 0]], 0.0011, 0.0011, m.vine, gun.tassel, { seg: 8, radial: 4 });
@@ -224,7 +183,6 @@
                 gun.flash = b.flash(gun.muzzle, null, C.glow, 0.05, 2);
                 b.part(g);
 
-                // hand grip on the gun, and the same grip on a copy that follows the gun minus its twirls
                 const n = side > 0 ? 'R' : 'L';
                 const hold = { fingers: [0, 0, -1], back: [side, 0, 0.35], around: 0.017, curl: 0.9 };
                 b.grip('grip' + n, grip, [0, -0.05, 0], hold);
@@ -247,7 +205,6 @@
             w.data.thrown = null;
         },
 
-        // ---- alt fire: boomerang throw ----
         altPress(w) {
             if (w.state === 'ready' && w.cooldown <= 0) {
                 w.data.thrown = null;
@@ -292,7 +249,6 @@
             w.data.thrown = null;
         },
 
-        // A world-space copy of a pistol to fly around (shares geometry and materials with the real one).
         cloneOf(w, gun) {
             if (!gun.clone) {
                 const c = gun.g.clone(true);
@@ -304,7 +260,6 @@
                     }
                 });
                 lights.forEach(l => l.parent.remove(l));
-                // faint spinning blur disc so the flying gun reads as a boomerang
                 const disc = new THREE.Mesh(
                     new THREE.RingGeometry(0.03, 0.16, 40),
                     new THREE.MeshBasicMaterial({ color: this.color, transparent: true, opacity: 0.2, blending: THREE.AdditiveBlending, side: THREE.DoubleSide, depthWrite: false })
@@ -337,7 +292,6 @@
                     D = Math.max(1.5, hit.point.distanceTo(origin) - 0.6);
                 }
             }
-            // the gun looks bigger in the narrower gun camera; scale the flying copy to match
             const view = w.view;
             const ratio = view ? Math.tan(K.clamp(view.camera.fov, 1, 170) * Math.PI / 360) / Math.tan(view.cam.fov * Math.PI / 360) : 1;
             const th = { f, right, up, D, ratio, yaw: Math.atan2(-f.x, -f.z), guns: [] };
@@ -377,12 +331,10 @@
                 if (g.caught) {
                     return;
                 }
-                // a loop: out wide to the side, back on a tighter line, rising slightly at the far end
-                const forward = th.D * Math.pow(Math.sin(Math.PI * u), 1.5); // lingers near you at the start and end
+                const forward = th.D * Math.pow(Math.sin(Math.PI * u), 1.5);
                 const lateral = g.sign * g.W * (Math.pow(Math.sin(Math.PI * u), 2) + 0.55 * Math.sin(2 * Math.PI * u));
                 const rise = 0.35 * Math.sin(Math.PI * u);
                 pos.copy(g.start).addScaledVector(th.f, forward).addScaledVector(th.right, lateral).addScaledVector(th.up, rise);
-                // come home to where the hand is now, not where it was
                 w.worldPos(P.model, g.gun.g.userData.rest.p.toArray(), hand);
                 pos.addScaledVector(hand.sub(g.start), K.ease.inOutSine(u));
                 g.clone.position.copy(pos);
@@ -392,7 +344,6 @@
                 g.clone.scale.setScalar(K.lerp(th.ratio, th.ratio * 1.7, Math.sin(Math.PI * u)));
                 g.clone.userData.disc.material.opacity = 0.18 + 0.15 * Math.sin(Math.PI * u) + Math.random() * 0.06;
 
-                // spore trail from the tips of the spinning gun
                 const n = w.fx.rate('boom' + g.s, 110, dt);
                 const sc = g.clone.scale.x;
                 for (let i = 0; i < n; i++) {
@@ -401,7 +352,6 @@
                     w.fx.emit({ world: true, pos: tipPos, vel: K.sphereDir().multiplyScalar(0.2), life: K.rand(0.3, 0.55), size: K.rand(0.014, 0.024), sizeEnd: 0, color: Math.random() < 0.7 ? this.color : 0xffffff, drag: 2 });
                 }
 
-                // damage anything the gun sweeps through
                 g.hitCd -= dt;
                 const step = pos.clone().sub(g.prev);
                 const len = step.length();
@@ -430,7 +380,6 @@
             });
         },
 
-        // Right pistol (index 1) fires on even ammo counts, left (0) on odd, so they alternate.
         side(w) {
             return w.ammo % 2 === 0 ? 1 : 0;
         },
@@ -442,12 +391,10 @@
             w.data.twist[side].kick((side ? -1 : 1) * 3);
             w.data.gunFireT[side] = 0;
         },
-        // Rounds left in each gun.
         share(w, side, ammo = w.ammo) {
             return side ? Math.floor(ammo / 2) : Math.ceil(ammo / 2);
         },
 
-        // Reload timeline for one gun (s = 0 left, 1 right; the right one runs slightly behind).
         tl(s) {
             const d = s * 0.08;
             return {
@@ -479,7 +426,7 @@
                 const g = gun.g;
                 const sign = s ? 1 : -1;
                 const share = this.share(w, s);
-                gun.twirl = 0; // spin around the trigger finger this frame (the hand doesn't follow it)
+                gun.twirl = 0;
 
                 g.rotation.x += kick.x * 0.1;
                 g.position.z += kick.x * 0.006;
@@ -488,7 +435,6 @@
                 gun.tassel.rotation.z += w.dangle(w.data.tassel[s], dt, 1.6) * 0.8;
                 gun.tassel.rotation.x += Math.sin(w.time * 2 + s) * 0.08;
 
-                // ---- boomerang throw: wind-up, hidden while flying, catch ----
                 if (w.state === 'throw') {
                     const T = this.throwT;
                     const t = w.actT;
@@ -511,7 +457,6 @@
                     }
                 }
 
-                // slide blowback, and it stays locked back once this gun is empty
                 let back = K.e('outQuad', ft, 0, 0.03) * (1 - K.e('inOutCubic', ft, 0.04, 0.1));
                 if (share === 0 && ft > 0.03) {
                     back = 1;
@@ -524,7 +469,6 @@
                 gun.coreMesh.scale.multiplyScalar(0.35 + 0.65 * share / half);
                 gun.coreMesh.rotation.y += w.time * 0.8;
 
-                // ---- inspect: side-on, double twirl, flip, press-check ----
                 const it = w.inspectT;
                 if (it >= 0) {
                     const d = s * 0.1;
@@ -541,7 +485,6 @@
                     gun.port.emissiveIntensity += K.hump(it, 2.05 + d, 2.45 + d) * 2.5;
                 }
 
-
                 if (r < 0) {
                     gun.slide.position.z += back * 0.03;
                     gun.vines.forEach(v => {
@@ -556,17 +499,14 @@
                 }
 
                 const T = this.tl(s);
-                // twirl backwards around the trigger finger
                 const spin = K.e('inOutCubic', r, T.d, 0.45 + T.d);
                 g.rotation.x += spin * Math.PI * 2;
                 gun.twirl += spin * Math.PI * 2;
                 g.position.y += K.hump(r, T.d, 0.45 + T.d) * 0.04;
 
-                // slide pulls back at the start and is racked forward at the end
                 back = Math.max(back, K.e('outCubic', r, 0.05, 0.15)) * (1 - K.e('outBack', r, T.rack, T.rack + 0.12));
                 gun.slide.position.z += back * 0.03;
 
-                // old sac is flung off mid-spin; the new one swells later
                 const growSac = K.seg(r, T.sacA, T.sacB);
                 if (r > 0.24 + T.d) {
                     gun.sac.visible = growSac > 0;
@@ -576,22 +516,19 @@
                     gun.core.emissiveIntensity = 0.6 + growSac * 1.2 + K.hump(r, 1.6, 1.95) * 2.2;
                 }
 
-                // turn side-on to you, close together, so the vines can be seen covering the gun
                 const show = K.e('inOutCubic', r, 0.42, 0.75) * (1 - K.e('inOutCubic', r, 1.95, 2.3));
-                // muzzles swing outward until each gun is almost side-on to the camera
                 g.position.x -= sign * show * 0.075;
                 g.position.y += show * 0.085;
                 g.position.z += show * 0.03;
                 g.rotation.y -= sign * show * 1.2;
                 g.rotation.x += show * 0.1 + Math.sin(r * 3 + s) * 0.03 * show;
 
-                // vines
                 const vg = K.e('inOutSine', r, T.growA, T.growB);
                 const wither = K.e('inCubic', r, T.wither[0], T.wither[1]);
                 gun.vines.forEach(v => WeaponKit.grow(v, vg * (1 - wither)));
                 const span = T.growB - T.growA;
                 gun.extras.forEach(x => {
-                    const reach = T.growA + x.u * span; // roughly when the vine tip passes this point
+                    const reach = T.growA + x.u * span;
                     const out = 1 - K.e('inCubic', r, T.wither[0] - 0.08, T.wither[0] + 0.06);
                     if (x.kind === 'branch') {
                         WeaponKit.grow(x.mesh, K.seg(r, reach, reach + 0.15) * out);
@@ -606,7 +543,6 @@
                     }
                 });
 
-                // cock the hammer as the slide is racked
                 gun.hammer.rotation.x += K.hump(r, T.rack - 0.02, T.rack + 0.18) * 0.7;
                 g.rotation.x += K.hump(r, T.rack, T.rack + 0.16) * 0.07;
             });
@@ -623,7 +559,6 @@
                 gun.hold.position.copy(g.position);
                 gun.hold.rotation.copy(g.rotation);
                 gun.hold.rotation.x -= gun.twirl;
-                // loosen the grip while the gun twirls
                 let open = 0;
                 if (it >= 0) {
                     open = K.hump(it, 0.45 + s * 0.1, 1.15 + s * 0.1);
@@ -657,7 +592,6 @@
                 }
                 fx.emit({ world: true, shape: 'ring', pos: o, dir: d, vel: d.clone().multiplyScalar(0.8), life: 0.12, size: 0.012, sizeEnd: 0.05, color: glow, opacity: 0.7 });
                 fx.emit({ world: true, pos: o, vel: d.clone().multiplyScalar(0.6), life: 0.45, size: 0.01, sizeEnd: 0.035, color: 0xd6e8d8, additive: false, opacity: 0.3, drag: 3, gravity: -0.2 });
-                // spent spore husk out of the port
                 const port = w.localPos(gun.slide, [0.02, 0.042, -0.018]);
                 fx.emit({ pos: port, vel: new THREE.Vector3(K.rand(0.8, 1.2), K.rand(0.8, 1.2), 0.3), life: 0.7, size: 0.006, sizeEnd: 0.005, color: 0x5f8f80, additive: false, gravity: 6, drag: 0.4 });
             }
@@ -677,7 +611,6 @@
                         fx.emit({ pos: sp, vel: K.sphereDir().multiplyScalar(0.3).add(new THREE.Vector3(sign * 0.4, 0.3, 0)), life: 0.5, size: 0.004, color: glow, drag: 2 });
                     }
                 }
-                // sparkles at the growing vine tips
                 if (r > T.growA && r < T.growB + 0.05) {
                     const vg = K.e('inOutSine', r, T.growA, T.growB);
                     gun.vines.forEach((v, k) => {
@@ -692,7 +625,6 @@
                         }
                     });
                 }
-                // motes gather into the new sac
                 if (r > T.sacA - 0.3 && r < T.sacB) {
                     const n = fx.rate('mote' + s, 40, dt);
                     for (let i = 0; i < n; i++) {
@@ -700,7 +632,6 @@
                         fx.emit({ pos, vel: K.sphereDir().multiplyScalar(0.05), attract: sp, pull: 2.2, swirl: 2.5 * sign, life: 0.9, size: K.rand(0.003, 0.005), sizeEnd: 0.001, color: glow, drag: 1.5, fadeIn: 0.12 });
                     }
                 }
-                // light pulse through the vines
                 if (w.atAct(1.62 + T.d * 0.5)) {
                     gun.vines.forEach(v => {
                         for (let i = 0; i < 10; i++) {
@@ -709,7 +640,6 @@
                         }
                     });
                 }
-                // withering: dry flakes fall off the vines
                 if (r > T.wither[0] && r < T.wither[1]) {
                     const n = fx.rate('wither' + s, 45, dt);
                     for (let i = 0; i < n; i++) {

@@ -1,31 +1,13 @@
-// Shared toolkit for the mushroom weapons. Plain script, global THREE (r128), no modules.
-//
-//   WeaponKit      easing + timeline helpers the animation code is written with
-//   Spring         small damped spring (recoil, look sway, jiggles)
-//   WeaponBuilder  makes every mesh/material for one weapon and remembers "parts" that animate
-//   SporeFX        pooled spore particles (muzzle bursts, poured powder, charge motes, husks)
-//   Weapon         one gun instance: state machine, firing, reload timing, sway, bob, recoil, draw
-//   Weapons        registry - each weapon file calls Weapons.register(id, def)
-//
-// Hands (js/hands.js): a weapon def says where the hands hold it with b.grip(...) in build(),
-// def.hands = { left, right } for the grips they rest on, and def.handPose(w, H, dt) to move them.
-//
-// Coordinate convention: a weapon's model points down -Z (same as the camera), +Y up, units in metres.
-// weapon.root is meant to be added to the camera: camera.add(weapon.root) (and the camera added to the scene).
-
 const WeaponKit = {
     clamp: (v, a = 0, b = 1) => Math.min(b, Math.max(a, v)),
     lerp: (a, b, t) => a + (b - a) * t,
 
-    // Progress of t through the window [a, b], clamped to 0..1.
     seg(t, a, b) {
         return WeaponKit.clamp((t - a) / (b - a));
     },
-    // 0 -> 1 -> 0 across [a, b].
     hump(t, a, b) {
         return Math.sin(WeaponKit.seg(t, a, b) * Math.PI);
     },
-    // Eased progress through [a, b].
     e(name, t, a, b) {
         return WeaponKit.ease[name](WeaponKit.seg(t, a, b));
     },
@@ -46,7 +28,6 @@ const WeaponKit = {
         outElastic: t => (t === 0 || t === 1 ? t : Math.pow(2, -10 * t) * Math.sin((t * 10 - 0.75) * (2 * Math.PI) / 3) + 1)
     },
 
-    // Cheap smooth pseudo-noise in roughly -1..1, deterministic for a given position.
     noise(x, y, z) {
         return (
             Math.sin(x * 1.3 + Math.sin(y * 1.7) * 1.2) * Math.cos(y * 1.1 + Math.sin(z * 1.9)) +
@@ -54,7 +35,6 @@ const WeaponKit = {
         ) * 0.5;
     },
 
-    // Seeded RNG so models look the same every time they are built.
     rng(seed) {
         let a = seed >>> 0;
         return () => {
@@ -66,7 +46,6 @@ const WeaponKit = {
         };
     },
 
-    // Grow a tube made by WeaponBuilder.tube() along its length (0 = hidden, 1 = full).
     grow(mesh, p) {
         const { tub, rad } = mesh.userData.tube;
         const segs = Math.floor(WeaponKit.clamp(p) * tub);
@@ -76,7 +55,6 @@ const WeaponKit = {
 
     rand: (a, b) => a + Math.random() * (b - a),
 
-    // Random unit vector.
     sphereDir(out = new THREE.Vector3()) {
         const u = Math.random() * 2 - 1;
         const a = Math.random() * Math.PI * 2;
@@ -84,7 +62,6 @@ const WeaponKit = {
         return out.set(Math.cos(a) * s, u, Math.sin(a) * s);
     },
 
-    // Direction inside a cone of half-angle `spread` (radians-ish) around `dir`.
     cone(dir, spread, out = new THREE.Vector3()) {
         const r = spread * Math.sqrt(Math.random());
         const a = Math.random() * Math.PI * 2;
@@ -104,7 +81,6 @@ class Spring {
         this.v += v;
     }
     update(dt) {
-        // Fixed sub-steps keep stiff springs stable at low frame rates.
         let left = dt;
         while (left > 0) {
             const h = Math.min(left, 1 / 120);
@@ -122,7 +98,6 @@ class WeaponBuilder {
         this.grips = {};
     }
 
-    // ---- materials -------------------------------------------------------
     mat(key, opts) {
         if (!this.mats[key]) {
             this.mats[key] = new THREE.MeshStandardMaterial(Object.assign({ roughness: 0.75, metalness: 0 }, opts));
@@ -136,7 +111,6 @@ class WeaponBuilder {
         return this.mat(key, { color, transparent: true, opacity, roughness: 0.08, depthWrite: false, side: THREE.DoubleSide });
     }
 
-    // ---- placement -------------------------------------------------------
     place(obj, parent, pos, rot, scale) {
         if (pos) {
             obj.position.set(pos[0], pos[1], pos[2]);
@@ -162,8 +136,6 @@ class WeaponBuilder {
     mesh(geo, mat, parent, pos, rot, scale) {
         return this.place(new THREE.Mesh(geo, mat), parent, pos, rot, scale);
     }
-    // Remember an object's rest transform; the Weapon resets every part to rest each frame,
-    // so animation code only ever adds offsets on top of the rest pose.
     part(obj) {
         obj.userData.rest = {
             p: obj.position.clone(),
@@ -175,9 +147,6 @@ class WeaponBuilder {
         return obj;
     }
 
-    // A place a hand can hold (see hands.js). pos is the point held, in parent space; fingers is the
-    // way the open fingers point and back the way the back of the hand faces. around: radius of
-    // what's held, so the palm sits on its surface instead of at pos. curl: 0 open .. 1 fist.
     grip(name, parent, pos, o = {}) {
         const g = this.group(parent, pos);
         HandKit.basis(o.fingers || [0, 0, -1], o.back || [0, 1, 0], g.quaternion);
@@ -190,8 +159,6 @@ class WeaponBuilder {
         return g;
     }
 
-    // ---- geometry tweaks --------------------------------------------------
-    // Move each vertex along its normal by fn(position, normal). Recomputes normals (use with flatShading).
     displace(geo, fn) {
         const pos = geo.attributes.position;
         const nor = geo.attributes.normal;
@@ -207,7 +174,6 @@ class WeaponBuilder {
         geo.computeVertexNormals();
         return geo;
     }
-    // Organic lumpiness. Offsets depend only on position so seams never crack; normals are kept.
     wobble(geo, amp, freq = 40, seed = 0) {
         const pos = geo.attributes.position;
         const N = WeaponKit.noise;
@@ -226,8 +192,6 @@ class WeaponBuilder {
         return geo;
     }
 
-    // ---- primitives -------------------------------------------------------
-    // Cylinder lying along Z. rFront is the -Z end (towards the muzzle). Seam is hidden underneath.
     tubeZ(rFront, rBack, len, mat, parent, pos, opts = {}) {
         const geo = new THREE.CylinderGeometry(
             rFront, rBack, len,
@@ -264,7 +228,6 @@ class WeaponBuilder {
         return this.mesh(new THREE.BoxGeometry(w, h, d), mat, parent, pos, rot);
     }
 
-    // Tapered tube along a smooth curve through `points` (roots, stems, mycelium threads, tendrils).
     tube(points, r0, r1, mat, parent, opts = {}) {
         const curve = new THREE.CatmullRomCurve3(points.map(p => new THREE.Vector3(p[0], p[1], p[2])));
         const tub = opts.seg || 24;
@@ -297,7 +260,6 @@ class WeaponBuilder {
         return m;
     }
 
-    // Rounded box centred on its position: w along X, h along Y, d along Z.
     rbox(w, h, d, r, mat, parent, pos, rot) {
         const bev = Math.min(r * 0.5, w * 0.2, h * 0.2, d * 0.2);
         const W = w - 2 * bev;
@@ -321,8 +283,6 @@ class WeaponBuilder {
         return this.mesh(geo, mat, parent, pos, rot);
     }
 
-    // Mushroom cap with the dome pointing +Y; the origin sits on the rim plane.
-    // gillMat adds the underside and radial gill fins.
     cap(r, h, mat, gillMat, parent, pos, rot, opts = {}) {
         const g = this.group(parent, pos, rot, opts.scale);
         const seg = opts.seg || 26;
@@ -355,7 +315,6 @@ class WeaponBuilder {
         return g;
     }
 
-    // Raised warts/spots scattered over a cap made by cap().
     spots(capGroup, count, mat, size, seed = 1, minA = 0.2, maxA = 1.42) {
         const { r, h, flat } = capGroup.userData.capInfo;
         const rnd = WeaponKit.rng(seed);
@@ -377,7 +336,6 @@ class WeaponBuilder {
         return out;
     }
 
-    // Tiny decorative mushroom (stem + cap) sprouting from a surface, growing along +Y.
     mini(parent, pos, size, capMat, stemMat, rot) {
         const g = this.group(parent, pos, rot);
         this.mesh(new THREE.CylinderGeometry(size * 0.2, size * 0.3, size * 0.9, 8), stemMat, g, [0, size * 0.45, 0]);
@@ -385,7 +343,6 @@ class WeaponBuilder {
         return g;
     }
 
-    // Muzzle flash (additive core + forward spike + point light). The Weapon animates it on fire.
     flash(parent, pos, color, size = 0.05, intensity = 3) {
         const g = this.group(parent, pos);
         const mat = new THREE.MeshBasicMaterial({
@@ -395,15 +352,12 @@ class WeaponBuilder {
         const core = this.mesh(geo, mat, g);
         const spike = this.mesh(geo, mat, g);
         core.visible = spike.visible = false;
-        // Lights stay in the scene permanently at intensity 0 so toggling never recompiles shaders.
         const light = new THREE.PointLight(color, 0, 2.5, 2);
         g.add(light);
         return { group: g, core, spike, light, size, intensity, age: 9 };
     }
 }
 
-// Pooled particle system. Particles either live in the weapon rig's space (follow the gun:
-// poured powder, charging motes) or in world space (muzzle bursts that stay behind as you turn).
 class SporeFX {
     constructor(local, worldParent) {
         this.local = local;
@@ -415,14 +369,13 @@ class SporeFX {
             ring: new THREE.TorusGeometry(1, 0.07, 6, 32)
         };
         this.max = 500;
-        this.layer = 0; // render layer for rig-space particles (set by WeaponView)
+        this.layer = 0;
         this.acc = {};
         this._v = new THREE.Vector3();
         this._q = new THREE.Quaternion();
         this._z = new THREE.Vector3(0, 0, 1);
     }
 
-    // Spawn count for a continuous emitter running at `perSecond`.
     rate(key, perSecond, dt) {
         this.acc[key] = (this.acc[key] || 0) + perSecond * dt;
         const n = Math.floor(this.acc[key]);
@@ -430,16 +383,6 @@ class SporeFX {
         return n;
     }
 
-    /**
-     * o.pos, o.vel     THREE.Vector3 (copied). With o.world they are world-space, otherwise rig-space.
-     * o.life           seconds                  o.size / o.sizeEnd   radius at birth / death
-     * o.color          hex                      o.opacity            peak opacity
-     * o.additive       default true (glow). false for dust/husks.
-     * o.gravity        m/s^2 down (negative = rises)                  o.drag   velocity damping per second
-     * o.attract        Vector3 (kept by reference, so it can move)    o.pull / o.swirl   attraction strengths
-     * o.stretch        streak along velocity                          o.shape  'dot' | 'ring'
-     * o.dir            ring facing direction
-     */
     emit(o) {
         if (this.live.length >= this.max) {
             return null;
@@ -508,7 +451,6 @@ class SporeFX {
                 } else {
                     v.multiplyScalar(1 / d);
                     p.vel.addScaledVector(v, p.pull * dt * (1 + 0.3 / (d + 0.05)));
-                    // Swirl around the vertical axis through the target.
                     p.vel.x += -v.z * p.swirl * dt;
                     p.vel.z += v.x * p.swirl * dt;
                 }
@@ -564,18 +506,6 @@ class SporeFX {
     }
 }
 
-// Small visual projectiles: a glowing spore that flies from the muzzle to where the shot lands and
-// leaves a trail of spores behind it. Cheap on purpose: two pooled meshes per projectile (core +
-// halo, sharing materials per colour) and the trail is drawn with the weapon's SporeFX pool.
-// Damage stays hitscan (instant); projectiles are the visible part and splash when they arrive.
-//
-// def.projectile = {
-//   speed, size, stretch, color, core,          head: m/s, radius, length factor, halo + core colour
-//   trail: { spacing, life, size, color, drift, sparks, length },  spores every `spacing` m, for the first `length` m
-//   spiral: { radius, freq, strands },          optional helix of spores around the path (sniper)
-//   wobble,                                     sideways weave amplitude in metres (pistols)
-//   maxDist, impact: { count, size, ring }      distance when nothing is hit, splash on arrival
-// }
 class SporeProjectiles {
     constructor(fx) {
         this.fx = fx;
@@ -629,7 +559,6 @@ class SporeProjectiles {
         p.dir.copy(to).sub(from);
         p.dist = Math.max(0.01, p.dir.length());
         p.dir.multiplyScalar(1 / p.dist);
-        // two axes across the flight path, for spirals and weaving
         p.side.set(0, 1, 0).cross(p.dir);
         if (p.side.lengthSq() < 1e-6) {
             p.side.set(1, 0, 0);
@@ -644,7 +573,6 @@ class SporeProjectiles {
         this.live.push(p);
     }
 
-    // Point on the flight path at distance d, including the optional weave.
     at(p, d, out) {
         out.copy(p.from).addScaledVector(p.dir, d);
         const w = p.cfg.wobble;
@@ -666,7 +594,6 @@ class SporeProjectiles {
             p.travelled = Math.min(p.dist, p.travelled + c.speed * dt);
             this.at(p, p.travelled, p.pos);
 
-            // head: stretched along the path, halo flickers a little
             const s = c.size;
             const q = p.core.quaternion.setFromUnitVectors(this._z, p.dir);
             p.halo.quaternion.copy(q);
@@ -676,7 +603,6 @@ class SporeProjectiles {
             const fl = 1 + Math.sin(p.age * 60 + p.phase) * 0.15;
             p.halo.scale.set(s * fl, s * fl, s * fl * (c.stretch || 1) * 1.2);
 
-            // trail: drop spores at fixed spacing along the distance covered this frame
             const t = c.trail;
             if (t) {
                 const spacing = t.spacing || 0.4;
@@ -705,7 +631,7 @@ class SporeProjectiles {
                     }
                 }
                 if (budget <= 0) {
-                    p.dropped = end; // skip ahead rather than flood the pool
+                    p.dropped = end;
                 }
             }
 
@@ -722,7 +648,6 @@ class SporeProjectiles {
         const fx = this.fx;
         const K = WeaponKit;
         if (!p.hit) {
-            // faded out in the air: a small puff
             for (let i = 0; i < 3; i++) {
                 fx.emit({ world: true, pos: p.pos, vel: K.sphereDir(this._p).multiplyScalar(0.3), life: 0.3, size: c.size * 0.6, sizeEnd: 0, color: c.color, drag: 3 });
             }
@@ -777,12 +702,6 @@ const _wv = new THREE.Vector3();
 const _wq = new THREE.Quaternion();
 
 class Weapon {
-    /**
-     * new Weapon(id, { worldParent: scene, trace: (origin, dir, range) => hit, onShot: shot => {...} })
-     * worldParent: where muzzle smoke, spores and projectiles live (usually the scene). Optional.
-     * trace:       finds what each pellet hits, so projectiles fly to it and splash there. Optional.
-     * onShot:      called per trigger pull with the shot, including shot.hits[i] per pellet.
-     */
     constructor(id, opts = {}) {
         const def = Weapons.get(id);
         if (!def) {
@@ -816,7 +735,6 @@ class Weapon {
         this.fx = new SporeFX(this.rig, opts.worldParent);
         this.projectiles = new SporeProjectiles(this.fx);
         this.onShot = opts.onShot || null;
-        // trace(origin, dir, range) -> { point, normal, object } | null. Decides where shots land.
         this.trace = opts.trace || null;
         this.view = null;
 
@@ -833,8 +751,6 @@ class Weapon {
         this.prevFireT = 99;
         this.altHeld = false;
         this.lastMode = 'primary';
-        // Set by weapon defs: zoom 0..1 (scope; the host narrows the camera FOV and shows an overlay),
-        // steady 0..1 (damps sway and bob), spreadScale (multiplies spread).
         this.zoom = 0;
         this.steady = 0;
         this.spreadScale = 1;
@@ -862,15 +778,12 @@ class Weapon {
         }
     }
 
-    // ---- control API --------------------------------------------------------
     setTrigger(down) {
         if (down && !this.trigger) {
-            this.buffer = 0.18; // a click slightly before the gun is ready still counts
+            this.buffer = 0.18;
         }
         this.trigger = down;
     }
-    // Alternate fire (right mouse). What it does is up to the weapon def (altPress / altRelease / altTick).
-    // Like the trigger, it can't be started while sprinting.
     setAlt(down) {
         if (down && !this.altHeld) {
             this.altHeld = true;
@@ -887,7 +800,6 @@ class Weapon {
             }
         }
     }
-    // Play the weapon's inspect animation (any other action cancels it).
     inspect() {
         if (this.state === 'ready' && this.def.inspect && this.cooldown <= 0) {
             this.setState('inspect');
@@ -921,7 +833,6 @@ class Weapon {
         }
         this.setState('draw', false);
     }
-    // Feed raw mouse movement (pixels) for weapon sway.
     look(dx, dy) {
         this.swayX.kick(WeaponKit.clamp(-dx * 0.0011, -0.25, 0.25));
         this.swayY.kick(WeaponKit.clamp(-dy * 0.0011, -0.25, 0.25));
@@ -933,7 +844,6 @@ class Weapon {
         return this.state === 'reload' ? WeaponKit.clamp(this.actT / this.stats.reloadTime) : 0;
     }
 
-    // Give this weapon the player's hands (a Hands from hands.js), or take them back with null.
     setHands(hands) {
         if (this.hands === hands) {
             return;
@@ -947,33 +857,26 @@ class Weapon {
         }
     }
 
-    // ---- helpers for weapon defs ------------------------------------------------
-    // Changing state blends the pose over ~0.2s, so an interrupted animation never snaps.
     setState(s, blend = true) {
         this.state = s;
         this.actT = 0;
         this.prevActT = -1e-4;
         this.smooth = blend ? 1 : 0;
     }
-    // True on the frame the current action's timeline passes `t` seconds.
     atAct(t) {
         return this.prevActT < t && this.actT >= t;
     }
-    // True on the frame the time since the last shot passes `t`.
     atFire(t) {
         return this.prevFireT < t && this.fireT >= t;
     }
     get reloadT() {
         return this.state === 'reload' ? this.actT : -1;
     }
-    // World position of obj (+offset). With a WeaponView the gun is drawn with a different FOV,
-    // so the point is re-projected to where it actually appears on screen in the world camera.
     worldPos(obj, offset, out = new THREE.Vector3()) {
         out.set(offset ? offset[0] : 0, offset ? offset[1] : 0, offset ? offset[2] : 0);
         obj.localToWorld(out);
         return this.view ? this.view.toWorld(out) : out;
     }
-    // Raw world position, ignoring the view FOV correction (for rig-space maths).
     rawWorldPos(obj, offset, out = new THREE.Vector3()) {
         out.set(offset ? offset[0] : 0, offset ? offset[1] : 0, offset ? offset[2] : 0);
         return obj.localToWorld(out);
@@ -982,7 +885,6 @@ class Weapon {
         out.set(local ? local[0] : 0, local ? local[1] : 0, local ? local[2] : -1);
         return out.applyQuaternion(obj.getWorldQuaternion(_wq)).normalize();
     }
-    // Position of obj (+offset in obj space) expressed in rig space (for rig-space particles).
     localPos(obj, offset, out = new THREE.Vector3()) {
         this.rawWorldPos(obj, offset, out);
         return this.rig.worldToLocal(out);
@@ -991,11 +893,6 @@ class Weapon {
         return this.def.muzzle ? this.def.muzzle(this, side) : this.parts.muzzle;
     }
 
-    // ---- firing --------------------------------------------------------------------
-    /**
-     * Fire one shot. Alt modes pass overrides:
-     * { mode, ammo, cooldown, pellets, spread, damage, kickScale, projectile, flashScale }
-     */
     fire(o = {}) {
         const side = this.def.side ? this.def.side(this) : 0;
         this.lastSide = side;
@@ -1039,7 +936,6 @@ class Weapon {
         }
     }
 
-    // Drop every particle and projectile in flight (e.g. when switching weapons).
     clearEffects() {
         if (this.def.cancel) {
             this.def.cancel(this);
@@ -1048,15 +944,12 @@ class Weapon {
         this.fx.clear();
     }
 
-    // Report extra hits (e.g. a thrown weapon) to the host the same way as a shot.
     reportHits(hits, extra = {}) {
         if (this.onShot) {
             this.onShot(Object.assign({ weapon: this.id, damage: this.stats.damage, dirs: [], hits }, extra));
         }
     }
 
-    // Hitscan info: rays start at the eye (the camera this weapon is attached to) so shots
-    // land on the crosshair; `muzzle` is where tracers/effects should start.
     makeShot(side, o = {}) {
         const eye = this.root.parent || this.root;
         eye.updateWorldMatrix(true, false);
@@ -1069,7 +962,6 @@ class Weapon {
             dirs.push(spread ? WeaponKit.cone(aim, spread) : aim.clone());
         }
         this.root.updateWorldMatrix(true, true);
-        // Scoped in, the gun is hidden: start projectiles just below the crosshair instead of the muzzle.
         const muzzle = this.zoom > 0.5
             ? origin.clone().addScaledVector(aim, 1.2).addScaledVector(new THREE.Vector3(0, -1, 0).applyQuaternion(eye.getWorldQuaternion(new THREE.Quaternion())), 0.06)
             : this.worldPos(this.muzzle(side));
@@ -1086,10 +978,6 @@ class Weapon {
         };
     }
 
-    // ---- per frame ---------------------------------------------------------------
-    /**
-     * move: { speed: horizontal speed m/s, sprinting: bool, grounded: bool }
-     */
     update(dt, move = {}) {
         this.move = move;
         if (this.view) {
@@ -1125,7 +1013,6 @@ class Weapon {
         }
 
         this.pose(dt, move);
-        // a fully scoped-in gun is hidden so the scope overlay is clean
         this.root.visible = this.zoom < 0.97;
         this.root.updateWorldMatrix(true, true);
         if (this.def.effects) {
@@ -1153,7 +1040,6 @@ class Weapon {
             this.hands.begin(this.def.hands);
         }
 
-        // Shared feel: sway, bob, breathing, recoil, sprint and draw all happen on the rig.
         const speed = move.speed || 0;
         const grounded = move.grounded !== false;
         const sprint = !!move.sprinting && this.state !== 'reload';
@@ -1209,13 +1095,11 @@ class Weapon {
             this.def.pose(this, dt);
         }
 
-        // rig velocity (m/s, rig space) lets dangling parts swing believably
         if (dt > 0) {
             this.rigVel.copy(rig.position).sub(this._prevRig).multiplyScalar(1 / dt);
         }
         this._prevRig.copy(rig.position);
 
-        // interruption blending: ease from last frame's pose into the new one
         let smoothF = 0;
         if (this.smooth > 0) {
             this.smooth = Math.max(0, this.smooth - dt / 0.22);
@@ -1235,7 +1119,6 @@ class Weapon {
             pv.s.copy(o.scale);
         }
 
-        // hands go last so they hold on to the parts where they ended up this frame
         if (this.hands) {
             if (this.def.handPose) {
                 this.def.handPose(this, this.hands, dt);
@@ -1244,7 +1127,6 @@ class Weapon {
         }
     }
 
-    // A swinging charm: spring driven by the rig's motion. Returns the swing angle.
     dangle(spring, dt, gain = 1) {
         spring.v += (-this.rigVel.x * 6 - this.swayX.v * 0.8 + this.recoilX.v * 0.3) * gain * dt * 8;
         spring.update(dt);
@@ -1276,13 +1158,6 @@ class Weapon {
     }
 }
 
-// Draws weapons in a second pass with their own camera: a narrower FOV (so guns don't get
-// stretched by the world camera's wide FOV) and a cleared depth buffer (so they never clip into walls).
-//
-//   const view = new WeaponView(camera, { fov: 55 });
-//   view.shareLights(scene);            // let the scene's lights light the guns too
-//   view.attach(weapon);                // after camera.add(weapon.root)
-//   ...each frame: renderer.render(scene, camera); view.render(renderer, scene);
 class WeaponView {
     constructor(camera, opts = {}) {
         this.camera = camera;
@@ -1292,8 +1167,6 @@ class WeaponView {
         this._p = new THREE.Vector3();
         this._d = new THREE.Vector3();
     }
-    // Put every mesh/light of a weapon on the weapon layer. Flash lights stay on both layers so
-    // muzzle flashes light up the room as well as the gun.
     attach(weapon) {
         weapon.view = this;
         weapon.fx.layer = this.layer;
@@ -1311,8 +1184,6 @@ class WeaponView {
         weapon.fx.layer = 0;
         weapon.root.traverse(o => o.layers.set(0));
     }
-    // Camera-attached key and rim lights that only light the guns (layer 1), so they read well
-    // in any room. The camera must be in the scene.
     addLights() {
         const c = this.camera;
         const mk = (color, intensity, pos, target) => {
@@ -1325,9 +1196,9 @@ class WeaponView {
             return l;
         };
         this.lights = [
-            mk(0xfff1dc, 0.16, [-1.2, 1.6, 0.6], [0.2, -0.2, -0.6]),   // warm key from upper left
-            mk(0xbfe4ff, 0.42, [1.6, 0.9, -1.8], [0.2, -0.2, -0.5]),  // cool rim from behind right
-            mk(0xffe0b0, 0.08, [0, -1, -0.2], [0.1, 0, -0.5])          // soft bounce from below
+            mk(0xfff1dc, 0.16, [-1.2, 1.6, 0.6], [0.2, -0.2, -0.6]),
+            mk(0xbfe4ff, 0.42, [1.6, 0.9, -1.8], [0.2, -0.2, -0.5]),
+            mk(0xffe0b0, 0.08, [0, -1, -0.2], [0.1, 0, -0.5])
         ];
         return this.lights;
     }
@@ -1349,7 +1220,6 @@ class WeaponView {
         }
         this.cam.updateMatrixWorld();
     }
-    // A point on the gun -> the world point that appears at the same spot on screen.
     toWorld(v) {
         const eye = this._p.setFromMatrixPosition(this.cam.matrixWorld);
         const dist = v.distanceTo(eye);
@@ -1362,8 +1232,6 @@ class WeaponView {
         const auto = renderer.autoClear;
         renderer.autoClear = false;
         renderer.clearDepth();
-        // A colour/texture background makes three.js clear the frame on every render call,
-        // which would wipe out the world pass, so hide it for the gun pass.
         const bg = scene.background;
         scene.background = null;
         renderer.render(scene, this.cam);
@@ -1372,8 +1240,6 @@ class WeaponView {
     }
 }
 
-// Full-screen scope view for weapons with def.scope (the sniper). Call update(weapon, camera, baseFov)
-// every frame: it narrows the camera FOV with weapon.zoom, fades the overlay in, and kicks it on recoil.
 class ScopeOverlay {
     constructor(color = '#c77dff') {
         const el = document.createElement('div');
@@ -1383,7 +1249,6 @@ class ScopeOverlay {
         for (let i = 1; i <= 4; i++) {
             ticks.push(`<line x1="${i * 9}" y1="-2" x2="${i * 9}" y2="2"/><line x1="${-i * 9}" y1="-2" x2="${-i * 9}" y2="2"/><line x1="-2" y1="${i * 9}" x2="2" y2="${i * 9}"/>`);
         }
-        // gill-like ridges round the rim of the lens, a nod to the cap the scope sits on
         const gills = [];
         for (let i = 0; i < 48; i++) {
             const a = (i / 48) * Math.PI * 2;
@@ -1402,7 +1267,6 @@ class ScopeOverlay {
             </g>
             <circle r="1.4" fill="${color}"/>
           </svg>`;
-        // muzzle flash bloom seen through the lens when a scoped shot goes off
         const bloom = document.createElement('div');
         bloom.style.cssText = `position:absolute;inset:0;opacity:0;background:radial-gradient(circle at 50% 56%, ${color}cc 0, ${color}55 12vmin, transparent 30vmin);mix-blend-mode:screen`;
         el.appendChild(bloom);
@@ -1430,7 +1294,6 @@ class ScopeOverlay {
         }
         return z;
     }
-    // Mouse sensitivity multiplier while scoped.
     sensitivity(w) {
         const scope = w && w.def.scope;
         return scope ? 1 - (1 - (scope.sensitivity || 0.35)) * w.zoom : 1;

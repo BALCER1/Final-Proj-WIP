@@ -1,76 +1,8 @@
-// The player's hands: a pair of floating gloves for a mushroom creature. Chunky, squared-off shapes
-// with soft bevels: a hard carapace of overlapping plates over the back of the hand and the top of
-// each finger (stitched round the edge, studded over the knuckles, a seam down each finger), a soft
-// pale underside lined with gills like the underneath of a mushroom cap, and a flared cuff with a
-// rolled hem and a buckled strap. Four fingers and a thumb, two segments each. Every part has
-// texture coordinates, so skins can be put on any region (see setSkin).
-// Plain script, global THREE (r128), no modules. Load after weapon-kit.js.
-//
-//   HandKit     small helpers (grip orientation)
-//   HandShapes  builds the shared geometry (rounded boxes, gill lines, vertex shading)
-//   Hand        one hand: the model, its equipment sockets and the per-frame pose commands
-//   Hands       the pair: shared materials and colours, equipment, mounting into a weapon's rig
-//
-// Cheap on purpose: every shape is built once and shared by both hands (gills and shading are baked
-// into the geometry), four materials, two meshes per segment and no allocations per frame.
-//
-// Hand space: origin at the centre of the palm, the open fingers point down -Z, the back of the
-// hand faces +Y and the palm -Y. The thumb is on the inside (-X on the right hand, +X on the left).
-//
-// ---- Posing --------------------------------------------------------------------------------
-// Each frame both hands start on a base target, then any number of commands blend them elsewhere,
-// in order. With weapons the base comes from def.hands = { left: 'pump', right: 'grip' } (leave a
-// hand out and it waits off screen, appearing only while a command moves it) and the commands go
-// in def.handPose(w, H, dt):
-//
-//   H.right.to('lidR', weight)           blend towards a target by weight 0..1
-//   H.left.track(t, [                    timed moves: [start, end, target, ease = 'inOutCubic']
-//       [0.1, 0.3, 'lidL'],              (each key blends from wherever the hand is by then)
-//       [1.2, 1.4, 'pump']
-//   ])
-//   H.left.nudge(0, 0, -0.02)            offset in hand space (this pushes towards the fingertips)
-//   H.left.squeeze(0.3)                  extra curl for the whole hand (negative opens it)
-//   H.left.bend('inner', 0.5)            extra curl for one digit: 'inner' (next to the thumb),
-//                                        'middle', 'outer', 'thumb' (or 0..3)
-//   H.left.pop(0.1)                      scale up briefly (a grab or a tap)
-//   H.left.hide()
-//
-// A target is one of:
-//   'name'           a grip made with WeaponBuilder.grip(name, parent, pos, opts) on the current weapon
-//   an Object3D      the hand takes on its position and rotation (use a grip, or any object
-//                    oriented in hand space)
-//   a free pose      { p: [x, y, z], fingers: [x, y, z], back: [x, y, z], curl } in the space the
-//                    hands are mounted in (a weapon's rig). Keep these objects around; they are
-//                    cached and should not be made fresh every frame.
-// Curl: 0 = open flat hand, 1 = fist (fingertips tucked under). Grips default to 0.85.
-//
-// ---- Customising ---------------------------------------------------------------------------
-// Regions: shell (the carapace plates), flesh (the gilled underside), cuff, trim (strap, buckle,
-// stitching and knuckle studs).
-//   const hands = new Hands({ shell: 0x878d95, flesh: 0xeadfc8, cuff: 0x5b626c, trim: 0x8a5a32 });
-//   hands.paint(0x7a4a2c);                 recolour the carapace
-//   hands.paint(0xd8c8f0, 'flesh');        or another region (the gill lines stay a shade darker)
-//   hands.setSkin({                        a skin: any material settings per region, textures too
-//       shell:  { color: 0xffffff, map: shellTexture, roughness: 0.3 },
-//       trim:   { color: 0xd4a640, metalness: 0.8, roughness: 0.3 }
-//   });
-//   hands.setMaterial('shell', material);  or swap a region's whole material
-//   hands.equip('wrist', hand => makeBracer(hand.side));   an item on both hands; unequip('wrist')
-//   hands.right.attach('palm', orb);       one hand only; detach('palm') returns it
-// Sockets: wrist (cuffs, bracers), back (armour plates, gems), palm (held items, spell orbs) and
-// knuckles (knuckle-dusters, blades). Items should be built in hand space.
-//
-// ---- Without a weapon ------------------------------------------------------------------------
-// The hands work with anything (a spell or melee class): hands.mount(parent, { grips, layer }),
-// then each frame hands.begin({ left, right }), any commands, hands.solve().
-
 const HandKit = {
-    PALM: 0.02, // half the palm's thickness: grips with `around` put the palm this far off the surface
+    PALM: 0.02,
     _v: [new THREE.Vector3(), new THREE.Vector3(), new THREE.Vector3()],
     _m: new THREE.Matrix4(),
 
-    // Rotation of a hand whose open fingers point along `fingers` with the back of the hand facing
-    // `back` (roughly: it is straightened to be at right angles to the fingers).
     basis(fingers, back, out = new THREE.Quaternion()) {
         const [x, y, z] = HandKit._v;
         z.fromArray(fingers).normalize().negate();
@@ -80,11 +12,7 @@ const HandKit = {
     }
 };
 
-// Builds the hand geometry. Everything is non-indexed with position, normal and colour, so pieces
-// can be merged into one mesh per material; the colour is a brightness that the material's colour
-// is multiplied by (darker gill lines, carapace plates shaded darker towards their undersides).
 const HandShapes = {
-    // Box centred on the origin (w along X, h along Y, d along Z), square with soft bevelled edges.
     box(w, h, d, bevel) {
         const b = Math.min(bevel, w * 0.3, h * 0.3, d * 0.3);
         const W = w - 2 * b;
@@ -111,7 +39,6 @@ const HandShapes = {
         geo.deleteAttribute('uv');
         return geo;
     },
-    // Move vertices: fn(v) changes v in place.
     shape(geo, fn) {
         const pos = geo.attributes.position;
         const v = new THREE.Vector3();
@@ -122,7 +49,6 @@ const HandShapes = {
         geo.computeVertexNormals();
         return geo;
     },
-    // Brightness per vertex: a number, or fn(position) -> number.
     tint(geo, k) {
         const pos = geo.attributes.position;
         const col = new Float32Array(pos.count * 3);
@@ -134,14 +60,11 @@ const HandShapes = {
         geo.setAttribute('color', new THREE.BufferAttribute(col, 3));
         return geo;
     },
-    // Shade a carapace piece from lo (its underside) to 1 (its top).
     shade(geo, lo = 0.72) {
         geo.computeBoundingBox();
         const { min, max } = geo.boundingBox;
         return HandShapes.tint(geo, v => lo + (1 - lo) * Math.min(1, Math.max(0, (v.y - min.y) / (max.y - min.y))));
     },
-    // Texture coordinates projected from whichever side each face points to, one texture repeat per
-    // UV_SIZE metres, so a skin texture lies evenly over every piece.
     UV_SIZE: 0.06,
     uvs(geo) {
         const pos = geo.attributes.position;
@@ -181,7 +104,6 @@ const HandShapes = {
         list.forEach(g => g.dispose());
         return out;
     },
-    // Thin gill ridge (darker) lying on a surface.
     gill(len, x, y, z, yaw = 0) {
         const g = HandShapes.box(0.0013, 0.0014, len, 0.0004);
         g.rotateY(yaw);
@@ -189,8 +111,6 @@ const HandShapes = {
         return HandShapes.tint(g, 0.62);
     },
 
-    // One finger segment along -Z from its joint: a soft gilled core under a carapace plate. A tip
-    // segment's plate runs past the end and narrows to a blunt point.
     segment(w, h, len, tip) {
         const S = HandShapes;
         const core = S.box(w * 0.86, h * 0.72, len + h * 0.4, h * 0.2);
@@ -221,12 +141,8 @@ const HandShapes = {
                 v.y += (1 - Math.min(1, (v.x * v.x) / (w * w * 0.25))) * h * 0.06 * (v.y > h * 0.2 ? 1 : 0);
             });
         }
-        // a seam line down the middle of the plate
-        const seam = S.box(w * 0.13, 0.001, len * (tip ? 0.45 : 0.7), 0.0003);
-        seam.translate(0, h * (tip ? 0.455 : 0.515), -len * (tip ? 0.35 : 0.5));
-        return { flesh, shell: S.merge([S.shade(plate), S.tint(seam, 0.5)]) };
+        return { flesh, shell: S.merge([S.shade(plate)]) };
     },
-    // Indexed three.js shapes -> plain triangles without their own UVs (merge adds box UVs).
     prep(geo) {
         const g = geo.toNonIndexed();
         g.deleteAttribute('uv');
@@ -236,8 +152,6 @@ const HandShapes = {
 
     build() {
         const S = HandShapes;
-        // palm: soft core with gills radiating from the middle like the underside of a mushroom cap,
-        // long and short ones alternating, around a small round scar where a stem would be
         const core = S.box(0.054, 0.021, 0.066, 0.006);
         core.translate(0, -0.005, 0);
         S.tint(core, 1);
@@ -247,18 +161,12 @@ const HandShapes = {
             const a = (i / n) * Math.PI * 2;
             const dx = Math.sin(a);
             const dz = Math.cos(a);
-            // distance to the palm's edge in this direction, so the gills fill the squarish palm
             const edge = Math.min(0.024 / Math.max(0.001, Math.abs(dx)), 0.029 / Math.max(0.001, Math.abs(dz)));
             const r0 = i % 2 ? 0.014 : 0.0065;
             const len = edge - r0 - 0.002;
             gills.push(S.gill(len, dx * (r0 + len / 2), -0.0157, dz * (r0 + len / 2), a));
         }
-        const scar = new THREE.CylinderGeometry(0.0055, 0.0055, 0.0012, 16).toNonIndexed();
-        scar.deleteAttribute('uv');
-        scar.translate(0, -0.0158, 0);
-        const palmFlesh = S.merge([core, ...gills, S.tint(scar, 0.8)]);
-        // carapace: overlapping plates, a domed main plate with a crest down the middle, a ridge over
-        // the knuckles and a plate over the wrist end
+        const palmFlesh = S.merge([core, ...gills]);
         const main = S.box(0.062, 0.012, 0.042, 0.004);
         main.translate(0, 0.008, -0.004);
         S.shape(main, v => {
@@ -266,29 +174,23 @@ const HandShapes = {
                 v.y += 0.005 * (1 - (v.x * v.x) / (0.031 * 0.031));
             }
         });
-        const crest = S.box(0.008, 0.008, 0.05, 0.0028);
-        crest.translate(0, 0.0145, 0.002);
         const ridge = S.box(0.066, 0.011, 0.017, 0.0035);
         ridge.rotateX(0.18);
         ridge.translate(0, 0.009, -0.027);
         const rear = S.box(0.056, 0.011, 0.024, 0.0035);
         rear.rotateX(-0.14);
         rear.translate(0, 0.0075, 0.023);
-        const palmShell = S.merge([S.shade(rear), S.shade(main), S.shade(crest, 0.85), S.shade(ridge)]);
+        const palmShell = S.merge([S.shade(rear), S.shade(main), S.shade(ridge)]);
 
-        // thumb base: a squarish pad on the side of the palm
         const tcore = S.merge([S.tint(S.box(0.019, 0.017, 0.024, 0.005), 1)]);
         tcore.translate(0, -0.002, 0);
         const tplate = S.box(0.021, 0.009, 0.024, 0.003);
         tplate.translate(0, 0.006, 0);
 
-        // fingers: index and ring, the longer middle, the short little finger
         const finger = (l1, l2) => ({
             prox: S.segment(0.0135, 0.0135, l1, false), dist: S.segment(0.0125, 0.0125, l2, true), len: [l1, l2]
         });
 
-        // cuff: a flattened band flaring out from the wrist, a rolled hem round the end and a softly
-        // domed cap closing it off
         const oval = g => g.scale(1.08, 0.8, 1);
         const band = S.prep(new THREE.CylinderGeometry(0.031, 0.0285, 0.02, 20, 1, true));
         band.rotateX(Math.PI / 2);
@@ -301,8 +203,6 @@ const HandShapes = {
         cap.translate(0, 0.0025, 0.0535);
         const cuff = S.merge([S.tint(oval(band), 1), S.tint(oval(hem), 0.85), S.tint(oval(cap), 0.8)]);
 
-        // trim: a strap round the cuff with a buckle on the back, stitching round the main plate
-        // and a stud over each knuckle
         const trim = [];
         const strap = S.prep(new THREE.TorusGeometry(0.0302, 0.0024, 6, 32));
         strap.translate(0, 0.0025, 0.043);
@@ -312,22 +212,6 @@ const HandShapes = {
         const tongue = S.box(0.0026, 0.005, 0.009, 0.0008);
         tongue.translate(0, 0.0025 + 0.0302 * 0.8 + 0.0022, 0.043);
         trim.push(S.tint(buckle, 1.15), S.tint(tongue, 0.6));
-        const top = x => 0.0143 + 0.005 * (1 - (x * x) / (0.031 * 0.031));
-        const stitch = (x, z, along) => {
-            const g = S.box(along ? 0.0009 : 0.0028, 0.0008, along ? 0.0028 : 0.0009, 0.0002);
-            g.translate(x, top(x), z);
-            trim.push(S.tint(g, 0.95));
-        };
-        for (let z = -0.02; z <= 0.013; z += 0.0045) {
-            stitch(-0.0275, z, true);
-            stitch(0.0275, z, true);
-        }
-        for (let x = -0.025; x <= 0.0251; x += 0.0045) {
-            if (Math.abs(x) > 0.006) {
-                stitch(x, -0.0225, false);
-                stitch(x, 0.0145, false);
-            }
-        }
         for (const x of [-0.0215, -0.0072, 0.0072, 0.0215]) {
             const stud = S.prep(new THREE.CylinderGeometry(0.0027, 0.0034, 0.0026, 10));
             stud.rotateX(0.18);
@@ -355,16 +239,15 @@ const _hm = new THREE.Matrix4();
 class Hand {
     constructor(pair, side) {
         this.pair = pair;
-        this.side = side; // -1 left, 1 right
+        this.side = side;
         this.name = side < 0 ? 'left' : 'right';
-        const tx = -side; // the thumb's side in hand space
+        const tx = -side;
         this.tx = tx;
 
         const G = Hands.geometry();
         this.root = new THREE.Group();
         this.root.name = 'hand:' + this.name;
         this.meshes = { shell: [], flesh: [], cuff: [], trim: [] };
-        // a piece = { flesh, shell } geometry pair, added as two meshes
         const mk = (piece, parent, pos) => {
             for (const region of ['flesh', 'shell']) {
                 const m = new THREE.Mesh(piece[region], pair.material(region));
@@ -384,7 +267,6 @@ class Hand {
             parent.add(g);
             return g;
         };
-        // A digit: two segments along -Z from its knuckle, bending at the joint between them.
         const digit = (parts, parent, pos, splay) => {
             const knuckle = group(parent, pos, [0, splay, 0]);
             mk(parts.prox, knuckle);
@@ -394,21 +276,17 @@ class Hand {
         };
 
         mk(G.palm, this.root);
-        // four fingers from the thumb side out: index, middle, ring, little; splayed a little
         const F = G.fingers;
         this.fingers = [F.index, F.middle, F.ring, F.little].map((parts, i) => {
             const x = tx * (0.0215 - i * 0.0143);
             return digit(parts, this.root, [x, -0.002, -0.028 - (i === 1 ? 0.001 : 0) + (i === 3 ? 0.003 : 0)], -x * 6);
         });
-        // thumb: thicker than the fingers, on a pad low on the side of the palm, angled out
         this.thumb = group(this.root, [tx * 0.027, -0.006, 0.01]);
         mk(G.thumb.base, this.thumb, [tx * 0.004, 0, 0]);
         this.thumbDigit = digit(G.thumb, this.thumb, [0, 0, -0.008], -tx * 0.7);
-        // names for bend(): index into this.fingers, 4 = the thumb ('inner' = index, 'outer' = little)
         this.digits = { inner: 0, index: 0, middle: 1, ring: 2, outer: 3, little: 3, thumb: 4 };
         this.bends = [0, 0, 0, 0, 0];
 
-        // cuff and trim are built in hand space, so they sit straight on the root
         for (const region of ['cuff', 'trim']) {
             const m = new THREE.Mesh(G[region], pair.material(region));
             this.root.add(m);
@@ -423,7 +301,6 @@ class Hand {
         };
         this.items = {};
 
-        // Hidden pose to start from when there is no base target: low and out of view.
         this.rest = { p: [side * 0.22, -0.42, -0.2], fingers: [0, 1, -0.3], back: [side * 0.3, 0, 1], curl: 0.5 };
 
         this.pos = new THREE.Vector3();
@@ -440,7 +317,6 @@ class Hand {
         this.moved = 0;
     }
 
-    // ---- pose commands (call every frame, after begin) -------------------------------------
     to(target, weight = 1) {
         if (!(weight > 0) || target === null || target === undefined) {
             return this;
@@ -483,7 +359,6 @@ class Hand {
         return this;
     }
 
-    // ---- equipment ------------------------------------------------------------------------
     attach(socket, obj) {
         this.detach(socket);
         this.sockets[socket].add(obj);
@@ -500,7 +375,6 @@ class Hand {
         return obj || null;
     }
 
-    // ---- internal ---------------------------------------------------------------------------
     _begin(base) {
         this.ncmd = 0;
         this.off.set(0, 0, 0);
@@ -542,7 +416,6 @@ class Hand {
         this.pos.add(_hp.copy(this.off).applyQuaternion(this.quat));
         this.curl = Math.min(1.1, Math.max(-0.25, this.curl + this.extraCurl));
 
-        // ease out of interrupted actions, like the weapon's own parts
         const pv = this.prev;
         if (f > 0 && pv.ok) {
             this.pos.lerp(pv.p, f);
@@ -559,14 +432,11 @@ class Hand {
         this.root.scale.setScalar(P.scale * (1 + this.scaleUp));
         const c = this.curl;
         const b = this.bends;
-        // Like real fingers: the knuckle can tip back a little past straight, the middle joint can't.
         for (let i = 0; i < 4; i++) {
-            // the fingers further from the thumb curl a touch more
             const k = Math.min(1.2, Math.max(-0.12, c * (1 + i * 0.04) + b[i]));
             this.fingers[i].knuckle.rotation.x = -0.12 - k * 1.05;
             this.fingers[i].joint.rotation.x = -0.25 - Math.max(0, k) * 1.25;
         }
-        // the thumb can swing out a little past straight at its base (for flicks), its joint can't
         const t = Math.min(1.2, Math.max(-0.4, c + b[4]));
         this.thumb.rotation.set(0, this.tx * t * 0.35, -this.tx * t * 0.8);
         this.thumbDigit.joint.rotation.x = -0.15 - Math.max(0, t) * 0.9;
@@ -577,11 +447,13 @@ class Hands {
     constructor(opts = {}) {
         this.scale = opts.scale || 1;
         const pick = (v, d) => (v === undefined ? d : v);
+        const gray = pick(opts.color, 0x8a8f96);
+        const plain = c => new THREE.MeshStandardMaterial({ color: c, roughness: 0.6, metalness: 0.05, vertexColors: false });
         this.regions = {
-            shell: new THREE.MeshStandardMaterial({ color: pick(opts.shell, 0x878d95), roughness: 0.42, metalness: 0.05, vertexColors: true }),
-            flesh: new THREE.MeshStandardMaterial({ color: pick(opts.flesh, 0xeadfc8), roughness: 0.85, metalness: 0, vertexColors: true }),
-            cuff: new THREE.MeshStandardMaterial({ color: pick(opts.cuff, 0x5b626c), roughness: 0.6, metalness: 0.05, vertexColors: true }),
-            trim: new THREE.MeshStandardMaterial({ color: pick(opts.trim, 0x8a5a32), roughness: 0.5, metalness: 0.15, vertexColors: true })
+            shell: plain(pick(opts.shell, gray)),
+            flesh: plain(pick(opts.flesh, gray)),
+            cuff: plain(pick(opts.cuff, gray)),
+            trim: plain(pick(opts.trim, gray))
         };
         this.root = new THREE.Group();
         this.root.name = 'hands';
@@ -596,7 +468,6 @@ class Hands {
         this._warned = {};
     }
 
-    // The shapes, built once and shared by every hand.
     static geometry() {
         if (!Hands._geo) {
             Hands._geo = HandShapes.build();
@@ -611,15 +482,10 @@ class Hands {
         return this.regions[region];
     }
 
-    // ---- looks ------------------------------------------------------------------------------
-    // Recolour the carapace, or the region given (shell, flesh, cuff, trim).
     paint(color, region = 'shell') {
         this.regions[region].color.set(color);
         return this;
     }
-    // Apply a skin: { region: { color, map, normalMap, roughness, metalness, emissive, ... } }.
-    // Colours are set, everything else is assigned to the region's material as given. Textures
-    // should use RepeatWrapping (one repeat covers HandShapes.UV_SIZE metres on the hand).
     setSkin(skin) {
         for (const region in skin) {
             const mat = this.regions[region];
@@ -644,7 +510,6 @@ class Hands {
         }
         return this;
     }
-    // make(hand) builds the item for each hand (hand.side is -1 left, 1 right, for mirroring).
     equip(socket, make) {
         return this.both.map(h => h.attach(socket, make(h)));
     }
@@ -652,8 +517,6 @@ class Hands {
         return this.both.map(h => h.detach(socket));
     }
 
-    // ---- placing ----------------------------------------------------------------------------
-    // Put the hands inside `parent` (a weapon's rig). grips: name -> Object3D, layer: render layer.
     mount(parent, opts = {}) {
         parent.add(this.root);
         this.space = parent;
@@ -682,12 +545,10 @@ class Hands {
         });
     }
 
-    // Start a frame: base = { left, right } targets (missing ones wait off screen).
     begin(base) {
         this.left._begin(base && base.left);
         this.right._begin(base && base.right);
     }
-    // Finish a frame. smooth (0..1) eases from last frame's pose (used after interruptions).
     solve(smooth = 0) {
         if (!this.space) {
             return;
@@ -698,7 +559,6 @@ class Hands {
         this.right._solve(smooth);
     }
 
-    // Target -> position + rotation in mount space (sets this._curl). False if it can't be found.
     resolve(t, p, q) {
         if (typeof t === 'string') {
             const g = this.grips && this.grips[t];

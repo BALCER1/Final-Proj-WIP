@@ -1,6 +1,3 @@
-// Room registry plus the shared pieces (basic box room, exit door) that room files build from.
-// Each room type lives in its own file in this folder and calls Rooms.register().
-
 const Rooms = {
     defs: {},
     order: [],
@@ -41,7 +38,6 @@ class Door {
         this.isOpen = true;
         this.collider.off = true;
     }
-    // True once the player has walked through the doorway into the dark beyond.
     passed(pos) {
         return pos.z < this.z - 1.2;
     }
@@ -58,7 +54,6 @@ const RoomKit = {
     shade(color, k) {
         return new THREE.Color(color).multiplyScalar(k).getHex();
     },
-    // A plain rectangular room. The player spawns at the +z end facing the exit door at the -z end.
     basicRoom(b, o) {
         const W = (o.width || 14) / 2;
         const L = (o.length || 22) / 2;

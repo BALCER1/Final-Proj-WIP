@@ -1,6 +1,3 @@
-// Run map: generates the branching road of rooms (left to right) and draws it on a 2D canvas.
-// The zoom-out / zoom-in reveal plays at the start of a run and after boss stages.
-
 const rand = (a, b) => a + Math.random() * (b - a);
 const randInt = (a, b) => Math.floor(rand(a, b + 1));
 
@@ -67,8 +64,6 @@ const RunMap = {
         return 'combat';
     },
 
-    // Each node links to 1-3 neighbouring nodes in the next layer, and every
-    // node in the next layer gets at least one way in.
     connect(A, B) {
         if (B.length === 1) {
             A.forEach(n => n.next.push(B[0]));
@@ -192,7 +187,6 @@ const MapView = {
         });
     },
 
-    // opts: { onPick, animate, browse }. In browse mode (M key mid-room) nothing can be picked.
     open(opts) {
         this.onPick = opts.onPick;
         this.browse = !!opts.browse;
@@ -243,7 +237,6 @@ const MapView = {
         this.canvas.height = this.ch * this.dpr;
     },
 
-    // Camera views are {x, y, zoom}: the map point at screen centre and its scale.
     fitView() {
         const w = (RunMap.layers.length - 1) * RunMap.GAP;
         const zoom = Math.min((this.cw - 40) / (w + 120), (this.ch - 130) / (RunMap.HEIGHT + 60));
@@ -261,8 +254,6 @@ const MapView = {
         return { x: (minX + maxX) / 2, y: (minY + maxY) / 2, zoom: Math.max(zoom, this.fitView().zoom) };
     },
 
-    // Close-up on where you are -> zoom out over the whole road -> zoom back in on your choices.
-    // Without animate it just opens on the choices.
     buildAnim(animate) {
         const here = RunMap.current || this.choices[0];
         const ahead = this.choices.length ? this.choices : here.next;
