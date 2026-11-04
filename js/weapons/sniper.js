@@ -12,6 +12,9 @@
 //         pulls you out of the scope for a moment, and you settle back in if still holding.
 // Inspect: lifts the rifle, spins the reactor cap with a wave of light across its spots, flips the
 //         lens cover, glints the lens and checks the bolt.
+// Hands:  right on the grip (works the bolt after every shot), left under the barrel. Reload: the
+//         left hand hovers open over the cap drawing the spores in and clenches when it pops.
+//         Inspect: the left hand sets the cap spinning and flicks the lens cover.
 
 Weapons.register('sniper', {
     name: 'Amanita Longshot',
@@ -33,6 +36,7 @@ Weapons.register('sniper', {
     // the host narrows the camera to this FOV while w.zoom is 1
     scope: { fov: 16, sensitivity: 0.3 },
     inspect: { time: 3.4 },
+    hands: { left: 'forend', right: 'grip' },
 
     build(b) {
         const C = {
@@ -162,6 +166,14 @@ Weapons.register('sniper', {
         b.part(model);
 
         const lens = b.group(model, [0, sy, -0.165]);
+
+        // Hand grips
+        b.grip('grip', model, [0, -0.08, 0.095], { fingers: [0.65, -0.27, -0.65], back: [0.75, 0.1, 0.6], around: 0.018, curl: 0.9 });
+        b.grip('forend', model, [0, 0.004, -0.27], { fingers: [0.8, -0.6, 0], back: [-0.6, -0.8, 0], around: 0.024, curl: 0.85 });
+        b.grip('bolt', bolt, [0.044, 0, 0], { fingers: [0, -0.3, -1], back: [1, 0.3, 0], around: 0.014, curl: 0.75 });
+        b.grip('cap', model, [-0.115, 0.11, -0.03], { fingers: [0.3, 0.2, -1], back: [-0.6, 0.8, 0], curl: 0.1 });
+        b.grip('capSide', model, [0.12, 0.065, 0.02], { fingers: [0, 0, -1], back: [1, 0.3, 0], curl: 0.2 });
+        b.grip('cover', cover, [0.042, -0.03, -0.006], { fingers: [-0.3, 0, -1], back: [1, 0, 0], curl: 0.3 });
         return { model, reactor, cap, spots, coils, bolt, turrets, cover, lens, muzzle, flashes: [flash], m };
     },
 
@@ -300,6 +312,28 @@ Weapons.register('sniper', {
         });
 
         this.boltCycle(P, r, 2.48);
+    },
+
+    handPose(w, H) {
+        const K = WeaponKit;
+        if (w.fireT < 1.2) {
+            H.right.track(w.fireT, [[0.08, 0.22, 'bolt'], [0.74, 0.92, 'grip']]);
+        }
+        const it = w.inspectT;
+        if (it >= 0) {
+            H.left.track(it, [[0.25, 0.42, 'capSide'], [0.72, 0.92, 'forend'], [1.2, 1.4, 'cover'], [1.7, 1.95, 'forend']]);
+            H.left.nudge(0, 0, -0.07 * K.e('inOutCubic', it, 0.44, 0.62)); // swipe the cap round
+            H.right.track(it, [[2.24, 2.4, 'bolt'], [2.92, 3.12, 'grip']]);
+        }
+        const r = w.reloadT;
+        if (r < 0) {
+            return;
+        }
+        const absorbing = K.seg(r, 0.5, 0.7) * (1 - K.seg(r, 2.15, 2.3));
+        H.left.track(r, [[0.2, 0.5, 'cap'], [2.36, 2.6, 'forend']]);
+        H.left.nudge(Math.sin(r * 19) * 0.002 * absorbing, Math.sin(r * 8.5) * 0.004 * absorbing, 0);
+        H.left.squeeze(-0.15 * absorbing + K.hump(r, 2.2, 2.45) * 0.9);
+        H.right.track(r, [[2.32, 2.48, 'bolt'], [2.86, 3.0, 'grip']]);
     },
 
     effects(w, dt) {

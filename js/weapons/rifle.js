@@ -9,6 +9,10 @@
 //         rounds go out, and the burst pips on the side go dark one by one.
 // Inspect: turns the gun to show the vial, taps it (powder swirls, bubbles rise), peeks under the
 //         hatch, then rolls the whole carbine a full turn around the barrel.
+// Hands:  right on the grip, left under the handguard. Reload: the left hand flips the hatch,
+//         catches the pouch and pours it, the right hand racks the bolt. Inspect: the left hand taps
+//         the vial and lifts the hatch, both loosen while the carbine rolls in them, the right
+//         checks the bolt.
 
 Weapons.register('rifle', {
     name: 'Morel Carbine',
@@ -32,6 +36,8 @@ Weapons.register('rifle', {
         impact: { count: 9, size: 0.02 }
     },
     inspect: { time: 3.3 },
+    hands: { left: 'handguard', right: 'grip' },
+    // where the left hand waits (rig space) while the carbine rolls during inspect
 
     build(b) {
         const C = {
@@ -195,7 +201,19 @@ Weapons.register('rifle', {
         const pouchMouth = b.group(pouch, [0, 0.095, 0]);
         b.part(model);
 
-        return { model, morel, hatch, hatchRim, vial, liquid, bubbles, bolt, brackets, selector, pips, sling, muzzle, flashes: [flash], pouch, pouchMouth, rigExtras: [pouch], m };
+        // Hand grips
+        // grip and handguard hang off `steady`, a copy of the model without the inspect roll (see
+        // handPose), so the carbine rolls inside the hands instead of twisting them round
+        const steady = b.group();
+        b.grip('grip', steady, [0, -0.08, 0.095], { fingers: [0.65, -0.27, -0.65], back: [0.75, 0.1, 0.6], around: 0.018, curl: 0.9 });
+        b.grip('handguard', steady, [0, 0.008, -0.255], { fingers: [0.8, -0.6, 0], back: [-0.6, -0.8, 0], around: 0.03, curl: 0.8 });
+        b.grip('hatch', hatch, [-0.036, 0.008, -0.042], { fingers: [0.2, 0.3, -1], back: [-1, 0.4, 0], curl: 0.4 });
+        b.grip('bolt', bolt, [0.028, 0, 0], { fingers: [0, -0.3, -1], back: [1, 0.3, 0], around: 0.014, curl: 0.75 });
+        b.grip('hatchR', hatch, [0.036, 0.008, -0.042], { fingers: [-0.2, 0.3, -1], back: [1, 0.4, 0], curl: 0.4 });
+        b.grip('vial', vial, [0.09, 0, 0], { fingers: [-1, 0, 0], back: [0, 1, 0], curl: 0.15 });
+        b.grip('pouch', pouch, [0, 0.04, 0], { fingers: [0, 0.3, -1], back: [-1, -0.2, 0], around: 0.034, curl: 0.75 });
+
+        return { model, morel, hatch, hatchRim, vial, liquid, bubbles, bolt, brackets, selector, pips, sling, muzzle, flashes: [flash], pouch, pouchMouth, steady, rigExtras: [pouch, steady], m };
     },
 
     init(w) {
@@ -305,7 +323,8 @@ Weapons.register('rifle', {
                 w.data.slosh.kick(8);
             }
             P.hatch.rotation.x += K.hump(it, 1.25, 1.75) * 0.9;
-            P.model.rotation.z += K.e('inOutCubic', it, 1.9, 2.65) * Math.PI * 2;
+            w.data.roll = K.e('inOutCubic', it, 1.9, 2.65) * Math.PI * 2;
+            P.model.rotation.z += w.data.roll;
             P.bolt.position.z += K.hump(it, 2.75, 3.0) * 0.03;
         }
 
@@ -354,6 +373,29 @@ Weapons.register('rifle', {
         const boltBack = K.e('outCubic', r, 2.16, 2.28) - K.e('outBack', r, 2.33, 2.45);
         P.bolt.position.z += boltBack * 0.05;
         P.model.rotation.z += boltBack * 0.06;
+    },
+
+    handPose(w, H) {
+        const K = WeaponKit;
+        const P = w.parts;
+        const it = w.inspectT;
+        P.steady.position.copy(P.model.position);
+        P.steady.rotation.copy(P.model.rotation);
+        P.steady.rotation.z -= it >= 0 ? w.data.roll : 0;
+        if (it >= 0) {
+            H.left.track(it, [[0.55, 0.8, 'vial'], [1.05, 1.25, 'hatchR'], [1.55, 1.8, 'handguard']]);
+            const loose = K.hump(it, 1.8, 2.75);
+            H.left.squeeze(-0.6 * loose);
+            H.right.squeeze(-0.5 * loose);
+            H.left.nudge(0, 0, -0.016 * K.hump(it, 0.82, 0.96)); // tap
+            H.right.track(it, [[2.58, 2.74, 'bolt'], [3.02, 3.22, 'grip']]);
+        }
+        const r = w.reloadT;
+        if (r < 0) {
+            return;
+        }
+        H.left.track(r, [[0.08, 0.2, 'hatch'], [0.3, 0.52, 'pouch'], [1.92, 2.14, 'handguard']]);
+        H.right.track(r, [[1.98, 2.15, 'bolt'], [2.42, 2.6, 'grip']]);
     },
 
     effects(w, dt) {

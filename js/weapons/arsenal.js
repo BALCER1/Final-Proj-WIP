@@ -14,6 +14,8 @@ const Arsenal = {
     view: null,
     ray: new THREE.Raycaster(),
     hud: null,
+    // The player's hands, shared by every weapon (recolour / equip them here, see hands.js).
+    hands: null,
     // Called for every pellet that hits something: (hit, shot) where hit is { point, normal, object,
     // distance }. Point this at your enemy damage code later.
     onHit: null,
@@ -24,6 +26,7 @@ const Arsenal = {
         this.view.shareLights(scene);
         this.view.addLights();
         this.scope = new ScopeOverlay();
+        this.hands = new Hands();
         // slow the mouse down while scoped in
         const look = Player.look.bind(Player);
         Player.look = (dx, dy) => {
@@ -111,9 +114,11 @@ const Arsenal = {
             this.current.setTrigger(false);
             this.current.setAlt(false);
             this.current.clearEffects();
+            this.current.setHands(null);
         }
         this.current = this.weapons[id];
         camera.add(this.current.root);
+        this.current.setHands(this.hands);
         this.current.equip();
         this.updateHud();
     },

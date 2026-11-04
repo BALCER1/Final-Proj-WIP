@@ -7,6 +7,9 @@
 //   Weapon         one gun instance: state machine, firing, reload timing, sway, bob, recoil, draw
 //   Weapons        registry - each weapon file calls Weapons.register(id, def)
 //
+// Hands (js/hands.js): a weapon def says where the hands hold it with b.grip(...) in build(),
+// def.hands = { left, right } for the grips they rest on, and def.handPose(w, H, dt) to move them.
+//
 // Coordinate convention: a weapon's model points down -Z (same as the camera), +Y up, units in metres.
 // weapon.root is meant to be added to the camera: camera.add(weapon.root) (and the camera added to the scene).
 
@@ -116,6 +119,7 @@ class WeaponBuilder {
     constructor() {
         this.mats = {};
         this.parts = [];
+        this.grips = {};
     }
 
     // ---- materials -------------------------------------------------------
@@ -169,6 +173,21 @@ class WeaponBuilder {
         };
         this.parts.push(obj);
         return obj;
+    }
+
+    // A place a hand can hold (see hands.js). pos is the point held, in parent space; fingers is the
+    // way the open fingers point and back the way the back of the hand faces. around: radius of
+    // what's held, so the palm sits on its surface instead of at pos. curl: 0 open .. 1 fist.
+    grip(name, parent, pos, o = {}) {
+        const g = this.group(parent, pos);
+        HandKit.basis(o.fingers || [0, 0, -1], o.back || [0, 1, 0], g.quaternion);
+        if (o.around !== undefined) {
+            g.position.add(new THREE.Vector3(0, 1, 0).applyQuaternion(g.quaternion).multiplyScalar(o.around + HandKit.PALM));
+        }
+        g.userData.grip = { curl: o.curl === undefined ? 0.85 : o.curl };
+        g.name = 'grip:' + name;
+        this.grips[name] = g;
+        return g;
     }
 
     // ---- geometry tweaks --------------------------------------------------
@@ -787,7 +806,9 @@ class Weapon {
         this.root.add(this.rig);
 
         this.data = {};
+        this.hands = null;
         this.parts = def.build(this.b, this);
+        this.grips = this.b.grips;
         this.rig.add(this.parts.model);
         for (const o of this.parts.rigExtras || []) {
             this.rig.add(o);
@@ -910,6 +931,20 @@ class Weapon {
     }
     get reloadProgress() {
         return this.state === 'reload' ? WeaponKit.clamp(this.actT / this.stats.reloadTime) : 0;
+    }
+
+    // Give this weapon the player's hands (a Hands from hands.js), or take them back with null.
+    setHands(hands) {
+        if (this.hands === hands) {
+            return;
+        }
+        if (this.hands && this.hands.space === this.rig) {
+            this.hands.unmount();
+        }
+        this.hands = hands;
+        if (hands) {
+            hands.mount(this.rig, { grips: this.grips, layer: this.view ? this.view.layer : 0 });
+        }
     }
 
     // ---- helpers for weapon defs ------------------------------------------------
@@ -1114,6 +1149,9 @@ class Weapon {
             o.scale.copy(r.s);
             o.visible = r.v;
         }
+        if (this.hands) {
+            this.hands.begin(this.def.hands);
+        }
 
         // Shared feel: sway, bob, breathing, recoil, sprint and draw all happen on the rig.
         const speed = move.speed || 0;
@@ -1178,9 +1216,11 @@ class Weapon {
         this._prevRig.copy(rig.position);
 
         // interruption blending: ease from last frame's pose into the new one
+        let smoothF = 0;
         if (this.smooth > 0) {
             this.smooth = Math.max(0, this.smooth - dt / 0.22);
             const f = this.smooth * 0.9;
+            smoothF = f;
             for (const o of this.b.parts) {
                 const pv = o.userData.prev;
                 o.position.lerp(pv.p, f);
@@ -1194,6 +1234,14 @@ class Weapon {
             pv.q.copy(o.quaternion);
             pv.s.copy(o.scale);
         }
+
+        // hands go last so they hold on to the parts where they ended up this frame
+        if (this.hands) {
+            if (this.def.handPose) {
+                this.def.handPose(this, this.hands, dt);
+            }
+            this.hands.solve(smoothF);
+        }
     }
 
     // A swinging charm: spring driven by the rig's motion. Returns the swing angle.
@@ -1204,6 +1252,7 @@ class Weapon {
     }
 
     dispose() {
+        this.setHands(null);
         if (this.def.dispose) {
             this.def.dispose(this);
         }

@@ -2,13 +2,19 @@
 // Twin hollow-stalk barrels with flared gill bells, a puffball chamber with a hinged lid,
 // a gill-collar pump, and a gnarled root stock wrapped in mycelium.
 // Fire:   puffball squashes and blasts a cone of spores, then the pump racks and spits out a spent husk.
-// Reload: gun rolls in, the puffball lid pops open, glowing spore pods arc in one at a time,
-//         the lid slams shut in a cloud of dust, and the pump racks.
+// Reload: gun rolls in, the puffball lid pops open, the pods it needs sprout in the left palm and
+//         are flicked up into it one at a time, the lid slams shut in a cloud of dust, and the pump racks.
 // Alt (hold right mouse): CHARGE. The pump draws back, the puffball swells and trembles, spores are
 //         sucked into the glowing bells and the side gauge fills. Release for a bigger, tighter,
 //         harder-hitting blast (costs 2 pods when more than half charged).
 // Inspect: turns the gun to show one side, the lid peeks open and puffs, turns to the other side,
 //         checks the pump and settles back.
+// Hands:  right on the grip, left on the pump (it rides the rack). Reload: the left hand flips the
+//         lid open, then turns sideways on the left of the screen, thumb on top, the pods that are
+//         missing held in its loosely curled fingers. Like flipping a coin, one at a time a pod rolls
+//         up onto the curled index finger, the thumb tucks under it and snaps up, flicking it into
+//         the chamber. Then it slaps the lid shut and takes the pump back for the rack.
+//         Inspect: the left hand flicks the lid open.
 
 Weapons.register('shotgun', {
     name: 'Puffcap Blunderbuss',
@@ -33,6 +39,7 @@ Weapons.register('shotgun', {
         impact: { count: 5, size: 0.02, ring: 0.18 }
     },
     inspect: { time: 3.4 },
+    hands: { left: 'pump', right: 'grip' },
 
     build(b, w) {
         const C = {
@@ -180,7 +187,23 @@ Weapons.register('shotgun', {
         b.part(model);
 
         const bells = [-0.031, 0.031].map(x => b.group(model, [x, by, -0.64]));
-        return { model, chamber, lid, lidSprout, pump, pods, sprouts, muzzle, flashes: [flash], gauge, vents, charm, bells, m };
+
+        // Hand grips
+        b.grip('grip', model, [0, -0.07, 0.069], { fingers: [0.65, -0.27, -0.65], back: [0.75, 0.1, 0.6], around: 0.021, curl: 0.9 });
+        b.grip('pump', pump, [0, by - 0.006, 0], { fingers: [0.8, -0.6, 0], back: [-0.6, -0.8, 0], around: 0.066, curl: 0.7 });
+        b.grip('lidL', lid, [-0.088, 0.004, -0.07], { fingers: [0, 0.5, -1], back: [-1, 0.2, 0], curl: 0.45 });
+        b.grip('lidTop', lid, [-0.03, 0.045, -0.06], { fingers: [0.2, 0, -1], back: [-0.35, 1, 0], curl: 0.2 });
+        // Reload pods are flicked from here: the left hand sideways, thumb up, palm towards you and
+        // fingers pointing at the gun, out on the left of the screen. It lives in rig space so it
+        // stays put while the gun rolls. podSlots are in hand space (+X is up, towards the thumb):
+        // [0] on top of the curled index finger, where each pod is flicked from, then the places the
+        // waiting pods sit inside the curled fingers.
+        const flick = b.grip('flick', null, [-0.4, 0.02, 0.16], { fingers: [1, 0.05, -0.3], back: [0, -0.25, -1], curl: 0.6 });
+        const podSlots = [
+            [0.045, -0.031, -0.029],
+            [0.012, -0.03, -0.03], [-0.006, -0.03, -0.034], [0.012, -0.03, -0.012], [-0.008, -0.031, -0.016], [0.002, -0.032, 0.002]
+        ].map(p => new THREE.Vector3(...p).applyQuaternion(flick.quaternion).add(flick.position));
+        return { model, chamber, lid, lidSprout, pump, pods, sprouts, muzzle, flashes: [flash], gauge, vents, charm, bells, podSlots, rigExtras: [flick], m };
     },
 
     init(w) {
@@ -189,6 +212,10 @@ Weapons.register('shotgun', {
         w.data.charge = 0;
         w.data.lastCharge = 0;
         w.data.bellPos = [new THREE.Vector3(), new THREE.Vector3()];
+        w.data.podFrom = new THREE.Vector3();
+        w.data.podAt = new THREE.Vector3();
+        w.data.podRound = new THREE.Vector3();
+        w.data.m4 = new THREE.Matrix4();
     },
 
     onFire(w, side, o) {
@@ -238,11 +265,29 @@ Weapons.register('shotgun', {
         w.data.charge = 0;
     },
 
-    // Timing for each pod that flies in during a reload.
+    // Timing for each pod flicked in during a reload: [launch, landed].
     podWindow(w, k) {
         const missing = w.stats.mag - w.reloadFrom;
-        const start = 0.4 + k * (1.0 / Math.max(1, missing));
-        return [start, start + 0.26];
+        const start = 0.52 + k * (0.85 / Math.max(1, missing));
+        return [start, start + 0.28];
+    },
+    // Time between flicks, how long a pod takes to roll onto the fingers after the one before it
+    // goes, and how long the fingers take to flatten again.
+    podGap(w) {
+        return 0.85 / Math.max(1, w.stats.mag - w.reloadFrom);
+    },
+    podRoll(w) {
+        return Math.min(0.12, this.podGap(w) * 0.6);
+    },
+    // Where waiting pod k sits in the hand at time r: 0 = on the fingers, 1+ = palm slots.
+    podQueue(w, k, r) {
+        let q = k;
+        const roll = this.podRoll(w);
+        for (let j = 0; j < k; j++) {
+            const a = this.podWindow(w, j)[0];
+            q -= WeaponKit.e('inOutSine', r, a + 0.05, a + 0.05 + roll);
+        }
+        return q;
     },
 
     pose(w, dt) {
@@ -345,21 +390,40 @@ Weapons.register('shotgun', {
                 w.data.jiggle.kick(7);
             }
 
+            // rig space -> chamber space, for the pods waiting in the hand
+            P.model.updateMatrix();
+            P.chamber.updateMatrix();
+            const toChamber = w.data.m4.multiplyMatrices(P.model.matrix, P.chamber.matrix).invert();
+            const from = w.data.podFrom.copy(P.podSlots[0]).applyMatrix4(toChamber);
+            const at = w.data.podAt;
+            // the chamber is squashed and stretched, so undo that for the pods in the hand to keep them round
+            const cs = P.chamber.scale;
+            const round = w.data.podRound.set(0.7 / cs.x, 0.7 / cs.y, 0.7 / cs.z);
             const missing = w.stats.mag - w.reloadFrom;
             for (let k = 0; k < missing; k++) {
                 const pod = P.pods[w.reloadFrom + k];
                 const [a, z] = this.podWindow(w, k);
                 const p = K.seg(r, a, z);
-                pod.visible = p > 0;
-                if (p > 0 && p < 1) {
-                    const e = K.ease.inOutSine(p);
-                    const rest = pod.userData.rest.p;
+                // all the pods needed sprout in the palm as the hand turns over
+                const grow = K.ease.outBack(K.seg(r, 0.36 + k * 0.025, 0.5 + k * 0.025));
+                pod.visible = grow > 0;
+                const rest = pod.userData.rest.p;
+                if (pod.visible && r < a) {
+                    // waiting in the palm, rolling up towards the fingers as the ones before it go
+                    const q = Math.min(P.podSlots.length - 1, this.podQueue(w, k, r));
+                    const i = Math.floor(q);
+                    at.copy(P.podSlots[i]).lerp(P.podSlots[Math.min(i + 1, P.podSlots.length - 1)], q - i).applyMatrix4(toChamber);
+                    pod.position.copy(at);
+                    pod.scale.copy(round).multiplyScalar(Math.max(0.001, grow));
+                } else if (pod.visible && p < 1) {
+                    // flicked: flies up fast off the fingers and slows into the chamber
+                    const e = K.ease.outQuad(p);
                     pod.position.set(
-                        K.lerp(0.13, rest.x, e),
-                        K.lerp(-0.13, rest.y, e) + Math.sin(e * Math.PI) * 0.08,
-                        K.lerp(0.09, rest.z, e)
+                        K.lerp(from.x, rest.x, e),
+                        K.lerp(from.y, rest.y, e) + Math.sin(e * Math.PI) * 0.2,
+                        K.lerp(from.z, rest.z, e)
                     );
-                    pod.scale.multiplyScalar(K.lerp(1.6, 1, e));
+                    pod.scale.lerpVectors(round, pod.userData.rest.s, e);
                 } else if (p >= 1) {
                     const pop = K.hump(r, z, z + 0.12);
                     pod.scale.multiplyScalar(1 + pop * 0.35);
@@ -370,6 +434,34 @@ Weapons.register('shotgun', {
             P.pump.position.z += rack * 0.075;
             P.model.rotation.z += rack * 0.1;
         }
+    },
+
+    handPose(w, H) {
+        const K = WeaponKit;
+        if (w.state === 'charge') {
+            H.left.squeeze(w.data.charge * 0.25);
+        }
+        const it = w.inspectT;
+        if (it >= 0) {
+            H.left.track(it, [[0.6, 0.85, 'lidL'], [1.35, 1.65, 'pump']]);
+        }
+        const r = w.reloadT;
+        if (r < 0) {
+            return;
+        }
+        H.left.track(r, [[0.0, 0.13, 'lidL'], [0.3, 0.46, 'flick'], [1.36, 1.48, 'lidTop'], [1.64, 1.8, 'pump']]);
+        // a loose fist with the index curled tighter as a shelf for the pod; the thumb rests tucked
+        // under the pod, snaps up to flick it, then tucks back in for the next one
+        const flicking = K.seg(r, 0.3, 0.46) * (1 - K.seg(r, 1.36, 1.48));
+        H.left.bend('inner', 0.3 * flicking);
+        const missing = w.stats.mag - w.reloadFrom;
+        const relax = this.podRoll(w);
+        for (let k = 0; k < missing; k++) {
+            const a = this.podWindow(w, k)[0];
+            const snap = K.e('outQuad', r, a - 0.01, a + 0.04) * (1 - K.e('inOutSine', r, a + 0.05, a + 0.05 + relax));
+            H.left.bend('thumb', -1.0 * snap);
+        }
+        H.left.nudge(0, -0.014 * K.hump(r, 1.46, 1.62), 0); // slap the lid down
     },
 
     effects(w, dt) {
@@ -460,11 +552,16 @@ Weapons.register('shotgun', {
                 fx.emit({ pos: p, vel: K.sphereDir().multiplyScalar(0.25).add(new THREE.Vector3(0, 0.25, 0)), life: 0.6, size: 0.006, sizeEnd: 0.02, color: 0xd9d0b0, additive: false, opacity: 0.5, drag: 3 });
             }
         }
-        // trail on flying pods + sparkle when they land
+        // puff off the flick, trail on flying pods + sparkle when they land
         const missing = w.stats.mag - w.reloadFrom;
         for (let k = 0; k < missing; k++) {
             const pod = P.pods[w.reloadFrom + k];
             const [a, z] = this.podWindow(w, k);
+            if (w.atAct(a)) {
+                for (let i = 0; i < 6; i++) {
+                    fx.emit({ pos: P.podSlots[0], vel: K.sphereDir().multiplyScalar(0.2).add(new THREE.Vector3(0.25, 0.45, -0.1)), life: 0.3, size: 0.004, color: glow, drag: 3 });
+                }
+            }
             if (r > a && r < z) {
                 const n = fx.rate('trail' + k, 90, dt);
                 for (let i = 0; i < n; i++) {

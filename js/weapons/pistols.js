@@ -14,6 +14,8 @@
 //         spores and damaging what they pass through, then they curve back and are caught.
 // Inspect: both guns come up side-on, get a double revolver twirl, flip to show their other sides,
 //         and each slide is press-checked so its spore port flares.
+// Hands:  one on each grip. They hold a "hold" anchor that follows the gun without its twirls, so the
+//         guns spin in loosened hands; on the throw the hands open and follow through, then catch.
 
 (() => {
     // The grip is angled back like a Deagle's: this maps a point in grip space into gun space.
@@ -45,6 +47,12 @@
         inspect: { time: 3.2 },
         // boomerang throw timeline (seconds) and damage per hit
         throwT: { windup: 0.22, flight: 1.35, catch: 0.32, damage: 30, reach: 6 },
+        hands: { left: 'holdL', right: 'holdR' },
+        // open hands after letting go of the throw (rig space)
+        throwPose: [
+            { p: [-0.3, 0.03, -0.14], fingers: [-0.3, 0.5, -1], back: [-0.3, 0.6, 0.8], curl: 0.1 },
+            { p: [0.3, 0.03, -0.14], fingers: [0.3, 0.5, -1], back: [0.3, 0.6, 0.8], curl: 0.1 }
+        ],
 
         build(b) {
             const C = {
@@ -215,6 +223,14 @@
                 gun.muzzle = b.group(g, [0, 0.033, -0.175]);
                 gun.flash = b.flash(gun.muzzle, null, C.glow, 0.05, 2);
                 b.part(g);
+
+                // hand grip on the gun, and the same grip on a copy that follows the gun minus its twirls
+                const n = side > 0 ? 'R' : 'L';
+                const hold = { fingers: [0, 0, -1], back: [side, 0, 0.35], around: 0.017, curl: 0.9 };
+                b.grip('grip' + n, grip, [0, -0.05, 0], hold);
+                gun.hold = b.group(model);
+                b.grip('hold' + n, b.group(gun.hold, GP, [GA, 0, 0]), [0, -0.05, 0], hold);
+                gun.twirl = 0;
                 guns.push(gun);
             }
             b.part(model);
@@ -463,6 +479,7 @@
                 const g = gun.g;
                 const sign = s ? 1 : -1;
                 const share = this.share(w, s);
+                gun.twirl = 0; // spin around the trigger finger this frame (the hand doesn't follow it)
 
                 g.rotation.x += kick.x * 0.1;
                 g.position.z += kick.x * 0.006;
@@ -517,7 +534,8 @@
                     g.position.z += env * 0.03;
                     const flip = K.e('inOutCubic', it, 1.3 + d, 1.95 + d);
                     g.rotation.y += -sign * env * 1.0 * (1 - 2 * flip);
-                    g.rotation.x += K.e('inOutCubic', it, 0.45 + d, 1.15 + d) * Math.PI * 4;
+                    gun.twirl += K.e('inOutCubic', it, 0.45 + d, 1.15 + d) * Math.PI * 4;
+                    g.rotation.x += gun.twirl;
                     g.rotation.z += sign * env * 0.1;
                     back = Math.max(back, K.hump(it, 2.05 + d, 2.45 + d) * 0.7);
                     gun.port.emissiveIntensity += K.hump(it, 2.05 + d, 2.45 + d) * 2.5;
@@ -541,6 +559,7 @@
                 // twirl backwards around the trigger finger
                 const spin = K.e('inOutCubic', r, T.d, 0.45 + T.d);
                 g.rotation.x += spin * Math.PI * 2;
+                gun.twirl += spin * Math.PI * 2;
                 g.position.y += K.hump(r, T.d, 0.45 + T.d) * 0.04;
 
                 // slide pulls back at the start and is racked forward at the end
@@ -590,6 +609,36 @@
                 // cock the hammer as the slide is racked
                 gun.hammer.rotation.x += K.hump(r, T.rack - 0.02, T.rack + 0.18) * 0.7;
                 g.rotation.x += K.hump(r, T.rack, T.rack + 0.16) * 0.07;
+            });
+        },
+
+        handPose(w, H) {
+            const K = WeaponKit;
+            const T = this.throwT;
+            const it = w.inspectT;
+            const r = w.reloadT;
+            w.parts.guns.forEach((gun, s) => {
+                const hand = s ? H.right : H.left;
+                const g = gun.g;
+                gun.hold.position.copy(g.position);
+                gun.hold.rotation.copy(g.rotation);
+                gun.hold.rotation.x -= gun.twirl;
+                // loosen the grip while the gun twirls
+                let open = 0;
+                if (it >= 0) {
+                    open = K.hump(it, 0.45 + s * 0.1, 1.15 + s * 0.1);
+                }
+                if (r >= 0) {
+                    const d = this.tl(s).d;
+                    open = Math.max(open, K.hump(r, d, 0.45 + d));
+                }
+                if (w.state === 'throw') {
+                    const t = w.actT;
+                    const out = K.e('outCubic', t, T.windup - 0.02, T.windup + 0.14) * (1 - K.e('inOutCubic', t, T.windup + T.flight - 0.3, T.windup + T.flight));
+                    hand.to(this.throwPose[s], out);
+                    open = Math.max(open, out);
+                }
+                hand.squeeze(-0.7 * open);
             });
         },
 
