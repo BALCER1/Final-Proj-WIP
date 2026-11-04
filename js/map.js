@@ -52,7 +52,7 @@ const RunMap = {
             treasure: 8,
             elite: layer >= 3 ? 12 : 0,
             rest: layer >= 4 ? 5 : 0,
-            hall: layer >= 2 ? 7 : 0
+            cellar: layer >= 2 ? 7 : 0
         };
         let r = Math.random() * Object.values(weights).reduce((a, b) => a + b, 0);
         for (const [type, w] of Object.entries(weights)) {

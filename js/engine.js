@@ -126,7 +126,6 @@ const Player = {
         this.slide(p, 'x');
         p.z += this.vel.z * dt;
         this.slide(p, 'z');
-        const wasGround = this.onGround;
         p.y += this.vel.y * dt;
         this.onGround = false;
         const hit = this.hits(p);
@@ -138,12 +137,6 @@ const Player = {
                 p.y = this.pos.y;
             }
             this.vel.y = 0;
-        }
-        const gy = this.room.rampHeight(p.x, p.z);
-        if (gy !== null && this.vel.y <= 0 && (p.y <= gy || (wasGround && p.y - gy < 0.6))) {
-            p.y = gy;
-            this.vel.y = 0;
-            this.onGround = true;
         }
         if (p.y <= 0) {
             p.y = 0;
@@ -164,20 +157,11 @@ class RoomBuilder {
     constructor() {
         this.group = new THREE.Group();
         this.colliders = [];
-        this.ramps = [];
         this.door = null;
         this.spawn = { x: 0, z: 0, yaw: 0 };
         this.background = 0x000000;
         this.fog = null;
         scene.add(this.group);
-    }
-    rampHeight(x, z) {
-        for (const r of this.ramps) {
-            if (x >= r.x0 && x <= r.x1 && z >= r.zFar && z <= r.zNear) {
-                return Math.max(0, Math.min(r.top, r.slope * (r.zRef - z)));
-            }
-        }
-        return null;
     }
     mat(color) {
         return new THREE.MeshLambertMaterial({ color });

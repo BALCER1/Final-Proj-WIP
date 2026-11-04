@@ -51,7 +51,7 @@ Open `index.html` in a browser and hit Singleplayer. You need internet the first
 
 ## Current state
 
-**Working:** movement, full run loop from menu to boss, random map, all 4 weapons, settings (render scale, FOV, dark mode, fullscreen), the Great Hall room
+**Working:** movement, full run loop from menu to boss, random map, all 4 weapons, settings (render scale, FOV, dark mode, fullscreen)
 
 **Still to do:** enemies, real rooms, items, player health, shop/events, sound, the boss
 
