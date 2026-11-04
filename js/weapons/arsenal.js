@@ -6,6 +6,7 @@ const Arsenal = {
     hud: null,
     hands: null,
     onHit: null,
+    firing: false,
 
     init() {
         scene.add(camera);
@@ -37,6 +38,7 @@ const Arsenal = {
                 return;
             }
             if (e.button === 0) {
+                this.firing = true;
                 this.current.setTrigger(true);
             } else if (e.button === 2) {
                 this.current.setAlt(true);
@@ -44,6 +46,7 @@ const Arsenal = {
         });
         addEventListener('mouseup', e => {
             if (e.button === 0) {
+                this.firing = false;
                 this.current.setTrigger(false);
             } else if (e.button === 2) {
                 this.current.setAlt(false);
@@ -83,6 +86,7 @@ const Arsenal = {
         });
         document.addEventListener('pointerlockchange', () => {
             if (!document.pointerLockElement) {
+                this.firing = false;
                 this.current.setTrigger(false);
                 this.current.setAlt(false);
                 this.current.zoom = 0;
@@ -106,11 +110,15 @@ const Arsenal = {
         camera.add(this.current.root);
         this.current.setHands(this.hands);
         this.current.equip();
+        if (this.firing) {
+            this.current.setTrigger(true);
+        }
         this.updateHud();
     },
 
     reset() {
         const w = this.current;
+        this.firing = false;
         w.setTrigger(false);
         w.setAlt(false);
         w.clearEffects();

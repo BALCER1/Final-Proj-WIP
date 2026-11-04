@@ -3,7 +3,7 @@ Weapons.register('sniper', {
     altName: 'Scope',
     offset: [0.27, -0.18, -0.6],
     stats: {
-        mag: 5, rate: 0.95, auto: false, damage: 95, pellets: 1, spread: 0.028, range: 300,
+        mag: 5, rate: 0.95, auto: true, damage: 95, pellets: 1, spread: 0.028, range: 300,
         reloadTime: 3.0, drawTime: 0.6,
         kick: { back: 0.15, up: 0.3, roll: 0.06 }
     },

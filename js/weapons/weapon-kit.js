@@ -711,7 +711,7 @@ class Weapon {
         this.def = def;
         this.name = def.name;
         this.stats = Object.assign({
-            mag: 10, rate: 5, auto: false, damage: 10, pellets: 1, spread: 0,
+            mag: 10, rate: 5, auto: true, damage: 10, pellets: 1, spread: 0,
             reloadTime: 2, drawTime: 0.45, range: 100,
             kick: { back: 0.04, up: 0.06, roll: 0.01 }
         }, def.stats);
@@ -1010,6 +1010,9 @@ class Weapon {
                 this.buffer = 0;
                 this.reload();
             }
+        }
+        if (this.state === 'ready' && this.ammo <= 0 && this.cooldown <= 0) {
+            this.reload();
         }
 
         this.pose(dt, move);

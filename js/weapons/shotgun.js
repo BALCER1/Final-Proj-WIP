@@ -3,7 +3,7 @@ Weapons.register('shotgun', {
     altName: 'Charge',
     offset: [0.28, -0.19, -0.64],
     stats: {
-        mag: 6, rate: 1.25, auto: false, damage: 9, pellets: 9, spread: 0.09, range: 40,
+        mag: 6, rate: 1.25, auto: true, damage: 9, pellets: 9, spread: 0.09, range: 40,
         reloadTime: 2.35, drawTime: 0.5,
         kick: { back: 0.12, up: 0.22, roll: 0.05 }
     },
