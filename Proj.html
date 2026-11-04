@@ -62,7 +62,8 @@
   }
 
   #mapScreen {
-    background: #15171c;
+    color: var(--map-text);
+    background: var(--map-bg);
   }
 
   #mapCanvas {
@@ -84,25 +85,25 @@
     top: 0;
     padding: 14px 0 30px;
     font-size: 18px;
-    background: linear-gradient(#15171c 60%, transparent);
+    background: linear-gradient(var(--map-bg) 60%, transparent);
   }
 
   #mapHint {
     top: 46px;
     font-size: 13px;
-    color: #888;
+    color: var(--map-muted);
   }
 
   #legend {
     bottom: 0;
     padding: 24px 0 14px;
-    background: linear-gradient(transparent, #15171c 50%);
+    background: linear-gradient(transparent, var(--map-bg) 50%);
     display: flex;
     flex-wrap: wrap;
     justify-content: center;
     gap: 14px;
     font-size: 13px;
-    color: #bbb;
+    color: var(--map-legend);
   }
 
   #legend i {
@@ -168,6 +169,10 @@
     --sub: #b07070;
     --red: #d42424;
     --red-dark: #b01c1c;
+    --map-bg: #f4f1ee;
+    --map-text: #222;
+    --map-muted: #777;
+    --map-legend: #555;
   }
 
   html.dark {
@@ -180,6 +185,10 @@
     --sub: #c08080;
     --red: #e03a3a;
     --red-dark: #c42828;
+    --map-bg: #15171c;
+    --map-text: #eee;
+    --map-muted: #888;
+    --map-legend: #bbb;
   }
 
   html.dark select {

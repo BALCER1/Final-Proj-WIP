@@ -114,6 +114,10 @@ const RunMap = {
 
 const MapView = {
     R: 24,
+    themes: {
+        light: { bg: '#f4f1ee', label: '#999', path: '#222', option: '#444', edge: '#aaa', faint: '#ddd8d3', outline: '#333', current: '#222', ring: '#e0a800', hover: '#222', name: '#333' },
+        dark: { bg: '#15171c', label: '#666', path: '#fff', option: '#ddd', edge: '#555', faint: '#2c2f36', outline: '#000', current: '#fff', ring: '#ffd84d', hover: '#fff', name: '#ddd' }
+    },
     running: false,
     done: false,
     drag: null,
@@ -343,8 +347,9 @@ const MapView = {
         const ctx = this.ctx;
         const c = this.cam;
         const z = c.zoom;
+        const P = this.themes[document.documentElement.classList.contains('dark') ? 'dark' : 'light'];
         ctx.setTransform(this.dpr, 0, 0, this.dpr, 0, 0);
-        ctx.fillStyle = '#15171c';
+        ctx.fillStyle = P.bg;
         ctx.fillRect(0, 0, this.cw, this.ch);
         ctx.translate(this.cw / 2, this.ch / 2);
         ctx.scale(z, z);
@@ -353,7 +358,7 @@ const MapView = {
         ctx.font = '14px system-ui, sans-serif';
         ctx.textAlign = 'center';
         ctx.textBaseline = 'middle';
-        ctx.fillStyle = '#666';
+        ctx.fillStyle = P.label;
         RunMap.layers.forEach((layer, i) => {
             ctx.fillText(`Stage ${i + 1}`, i * RunMap.GAP, -10);
         });
@@ -363,7 +368,7 @@ const MapView = {
                 for (const m of n.next) {
                     const path = n.visited && m.visited;
                     const option = this.done && n === RunMap.current && this.choices.includes(m);
-                    ctx.strokeStyle = path ? '#fff' : option ? '#ddd' : this.reachable.has(m) ? '#555' : '#2c2f36';
+                    ctx.strokeStyle = path ? P.path : option ? P.option : this.reachable.has(m) ? P.edge : P.faint;
                     ctx.lineWidth = (path ? 4 : option ? 3 : 2) / z;
                     ctx.setLineDash(option ? [8 / z, 6 / z] : []);
                     ctx.beginPath();
@@ -386,7 +391,7 @@ const MapView = {
                 ctx.arc(n.x, n.y, this.R, 0, Math.PI * 2);
                 ctx.fill();
                 ctx.lineWidth = 2 / z;
-                ctx.strokeStyle = '#000';
+                ctx.strokeStyle = P.outline;
                 ctx.stroke();
                 ctx.font = 'bold 16px system-ui, sans-serif';
                 ctx.fillStyle = col.r * 0.3 + col.g * 0.59 + col.b * 0.11 > 0.55 ? '#111' : '#fff';
@@ -394,7 +399,7 @@ const MapView = {
                 ctx.globalAlpha = 1;
 
                 if (n === RunMap.current) {
-                    ctx.strokeStyle = '#fff';
+                    ctx.strokeStyle = P.current;
                     ctx.lineWidth = 4 / z;
                     ctx.beginPath();
                     ctx.arc(n.x, n.y, this.R + 7, 0, Math.PI * 2);
@@ -402,12 +407,12 @@ const MapView = {
                 }
                 if (this.done && this.choices.includes(n)) {
                     const pulse = n === this.hover ? 12 : 7 + Math.sin(time * 5) * 3;
-                    ctx.strokeStyle = n === this.hover ? '#fff' : '#ffd84d';
+                    ctx.strokeStyle = n === this.hover ? P.hover : P.ring;
                     ctx.lineWidth = 3 / z;
                     ctx.beginPath();
                     ctx.arc(n.x, n.y, this.R + pulse, 0, Math.PI * 2);
                     ctx.stroke();
-                    ctx.fillStyle = '#ddd';
+                    ctx.fillStyle = P.name;
                     ctx.font = '13px system-ui, sans-serif';
                     ctx.fillText(def.name, n.x, n.y + this.R + 28);
                 }
