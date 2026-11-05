@@ -43,6 +43,7 @@ const Game = {
         });
         document.addEventListener('pointerlockchange', () => {
             if (document.pointerLockElement === renderer.domElement) {
+                Input.resetLook();
                 this.setState('playing');
             } else if (this.state === 'playing') {
                 this.setState('paused');
@@ -53,8 +54,13 @@ const Game = {
             this.el.warn.hidden = false;
         });
         document.addEventListener('mousemove', e => {
-            if (this.state === 'playing') {
-                Player.look(e.movementX, e.movementY);
+            if (this.state !== 'playing') {
+                return;
+            }
+            const d = Input.lookDelta(e);
+            if (d) {
+                Player.look(d.x, d.y);
+                Arsenal.current.look(d.x, d.y);
             }
         });
 
@@ -89,7 +95,22 @@ const Game = {
     },
 
     lock() {
-        renderer.domElement.requestPointerLock();
+        // Raw (unadjusted) input avoids Chromium's pointer-lock movement spikes on Windows.
+        const el = renderer.domElement;
+        let req;
+        try {
+            req = el.requestPointerLock({ unadjustedMovement: true });
+        } catch (err) {
+            el.requestPointerLock();
+            return;
+        }
+        if (req && req.catch) {
+            req.catch(err => {
+                if (err && err.name === 'NotSupportedError') {
+                    el.requestPointerLock();
+                }
+            });
+        }
     },
 
     startRun() {

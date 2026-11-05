@@ -79,11 +79,6 @@ const Arsenal = {
                 this.current.inspect();
             }
         });
-        document.addEventListener('mousemove', e => {
-            if (playing()) {
-                this.current.look(e.movementX, e.movementY);
-            }
-        });
         document.addEventListener('pointerlockchange', () => {
             if (!document.pointerLockElement) {
                 this.firing = false;

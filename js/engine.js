@@ -20,6 +20,31 @@ addEventListener('resize', () => {
 
 const Input = {
     keys: {},
+    lookSkip: 0,
+    lastLook: 0,
+
+    // Chromium under pointer lock occasionally reports a bogus, huge movementX/Y
+    // (especially the first event after locking), which snaps the camera. Drop those.
+    lookDelta(e) {
+        const x = e.movementX || 0;
+        const y = e.movementY || 0;
+        if (this.lookSkip > 0) {
+            this.lookSkip--;
+            return null;
+        }
+        const m = Math.hypot(x, y);
+        if (m > 400 && m > this.lastLook * 4 + 100) {
+            return null;
+        }
+        this.lastLook = m;
+        return { x, y };
+    },
+
+    resetLook() {
+        this.lookSkip = 1;
+        this.lastLook = 0;
+    },
+
     init() {
         addEventListener('keydown', e => {
             this.keys[e.code] = true;
