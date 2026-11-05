@@ -58,3 +58,4 @@ Open `index.html` in a browser and hit Singleplayer. You need internet the first
 ## Author
 
 **Daniel Balcerzak** — [GitHub](https://github.com/BALCER1)
+**3d Models and animations created with the help of Claude Code**
